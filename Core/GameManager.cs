@@ -14,7 +14,7 @@ public class GameManager : MonoBehaviour
     public DataLoader dataLoader;
     
     [Header("角色系统")]
-    public CharacterGenerator characterGenerator;
+    public FamilyGenerator familyGenerator;
     public CharacterManager characterManager; // 添加这行
     
     [Header("人口配置")]
@@ -84,18 +84,19 @@ public class GameManager : MonoBehaviour
             terrainGenerator.GenerateTerrain(currentSeed);
         }
         
-        // 生成人口数据
-        Debug.Log($"🔍 检查 - characterGenerator: {(characterGenerator != null ? "存在" : "null")}");
-        Debug.Log($"🔍 参数 - initialFamilyCount: {initialFamilyCount}, avgFamilySize: {avgFamilySize}");
-    
-        if (characterGenerator != null)
+        
+        if (familyGenerator != null)  // 👈 改这里
         {
-            Debug.Log("📋 开始初始化 CharacterGenerator");
-            characterGenerator.Initialize(currentSeed.populationSeed);
+            Debug.Log("📋 开始初始化 FamilyGenerator");
+            familyGenerator.Initialize(currentSeed.populationSeed);  // 👈 改这里
             Debug.Log("📋 开始生成难民群体");
-            allCharacters = characterGenerator.GenerateRefugeeGroup(initialFamilyCount, avgFamilySize);
+            allCharacters = familyGenerator.GenerateRefugeeGroup(initialFamilyCount, avgFamilySize);
             
             Debug.Log($"📋 生成了 {allCharacters.Count} 个角色数据");
+        }
+        else
+        {
+            Debug.LogError("❌ FamilyGenerator 未配置!");
         }
 
         // 调试: 输出前3个角色的家族信息

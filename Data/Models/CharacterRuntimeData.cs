@@ -19,6 +19,11 @@ public class CharacterRuntimeData
     public List<string> childrenIds = new List<string>(); // 子女ID列表
     public int generation = 1;        // 代数（第几代）
     
+    /// <summary>
+    /// 生命状态 ("living" 或 "deceased")
+    /// </summary>
+    public string vitalStatus = "living";
+    
     [FoldoutGroup("状态")]
     public PhysicalState physical;
     

@@ -1,79 +1,102 @@
 using UnityEngine;
-using Sirenix.OdinInspector;
 
+/// <summary>
+/// 生育配置 - 扩展版
+/// 添加子女数量配置和死亡率配置
+/// </summary>
 [CreateAssetMenu(fileName = "FertilityConfig", menuName = "Game/Fertility Config")]
 public class FertilityConfig : ScriptableObject
 {
-    [Title("生育年龄")]
+    [Header("生育年龄范围")]
+    [Tooltip("最小生育年龄")]
     public int minBreedingAge = 16;
-    public int maxBreedingAgeMale = 70;
-    public int maxBreedingAgeFemale = 50;
     
-    [Title("代际间隔")]
+    [Tooltip("最大生育年龄")]
+    public int maxBreedingAge = 45;
+    
+    [Tooltip("最大寿命")]
+    public int maxLifespan = 80;
+    
+    [Header("代际间隔")]
+    [Tooltip("最小代际间隔(年)")]
     public int minGenerationGap = 18;
+    
+    [Tooltip("最大代际间隔(年)")]
     public int maxGenerationGap = 35;
     
-    [Title("夫妻年龄差")]
-    public int minCoupleAgeDiff = -5; // 负数表示妻子年龄可以大于丈夫
-    public int maxCoupleAgeDiff = 15;
+    [Header("夫妻年龄差")]
+    [Tooltip("最小夫妻年龄差(年) - 负数表示妻子比丈夫年轻")]
+    public int minCoupleAgeDiff = -5;
     
-    [Title("寿命")]
-    public int maxLifespan = 85;
+    [Tooltip("最大夫妻年龄差(年)")]
+    public int maxCoupleAgeDiff = 10;
     
-    [Title("生育曲线 [年龄上限, 生育率]")]
-    [TableList]
-    public FertilityCurvePoint[] fertilityCurve = new FertilityCurvePoint[]
+    [Header("子女数量配置")]
+    [Tooltip("最少子女数")]
+    public int minChildren = 1;
+    
+    [Tooltip("最多子女数")]
+    public int maxChildren = 5;
+    
+    [Tooltip("平均子女数")]
+    public float averageChildren = 3f;
+    
+    [Header("生育率曲线")]
+    [Tooltip("按母亲年龄的生育概率曲线")]
+    public AnimationCurve fertilityByAge = AnimationCurve.Linear(16, 0.5f, 45, 1f);
+    
+    [Header("多胎概率")]
+    [Tooltip("双胞胎概率")]
+    [Range(0f, 0.2f)]
+    public float twinProbability = 0.03f;
+    
+    [Tooltip("三胞胎概率")]
+    [Range(0f, 0.1f)]
+    public float tripletProbability = 0.01f;
+    
+    [Header("死亡率配置")]
+    [Tooltip("高死亡率家族的死亡率")]
+    [Range(0f, 1f)]
+    public float highMortalityRate = 0.65f;
+    
+    [Tooltip("低死亡率家族的死亡率")]
+    [Range(0f, 1f)]
+    public float lowMortalityRate = 0.15f;
+    
+    [Header("各代存活率")]
+    [Tooltip("第1代(高祖)存活率")]
+    [Range(0f, 1f)]
+    public float generation1SurvivalRate = 0.3f;
+    
+    [Tooltip("第2代(曾祖)存活率")]
+    [Range(0f, 1f)]
+    public float generation2SurvivalRate = 0.5f;
+    
+    [Tooltip("第3代(祖父母)存活率")]
+    [Range(0f, 1f)]
+    public float generation3SurvivalRate = 0.7f;
+    
+    [Tooltip("第4代(父母)存活率")]
+    [Range(0f, 1f)]
+    public float generation4SurvivalRate = 0.9f;
+    
+    [Tooltip("第5代(子女)存活率")]
+    [Range(0f, 1f)]
+    public float generation5SurvivalRate = 0.95f;
+    
+    /// <summary>
+    /// 获取某代的存活率
+    /// </summary>
+    public float GetSurvivalRate(int generation)
     {
-        new FertilityCurvePoint { ageLimit = 20, fertilityRate = 0.05f },
-        new FertilityCurvePoint { ageLimit = 25, fertilityRate = 0.15f },
-        new FertilityCurvePoint { ageLimit = 30, fertilityRate = 0.25f },
-        new FertilityCurvePoint { ageLimit = 35, fertilityRate = 0.30f },
-        new FertilityCurvePoint { ageLimit = 40, fertilityRate = 0.20f },
-        new FertilityCurvePoint { ageLimit = 45, fertilityRate = 0.05f },
-        new FertilityCurvePoint { ageLimit = 50, fertilityRate = 0.00f }
-    };
-    
-    [Title("多胎概率 [概率, 胎数]")]
-    [TableList]
-    public MultipleBirthRate[] multipleBirthRates = new MultipleBirthRate[]
-    {
-        new MultipleBirthRate { probability = 0.85f, count = 1 },
-        new MultipleBirthRate { probability = 0.12f, count = 2 },
-        new MultipleBirthRate { probability = 0.03f, count = 3 }
-    };
-    
-    [Title("存活率配置")]
-    [TableList]
-    public GenerationSurvivalRate[] survivalRates = new GenerationSurvivalRate[]
-    {
-        new GenerationSurvivalRate { generation = 1, survivalRate = 0.30f },
-        new GenerationSurvivalRate { generation = 2, survivalRate = 0.50f },
-        new GenerationSurvivalRate { generation = 3, survivalRate = 0.70f },
-        new GenerationSurvivalRate { generation = 4, survivalRate = 0.85f },
-        new GenerationSurvivalRate { generation = 5, survivalRate = 0.95f }
-    };
-}
-
-[System.Serializable]
-public class FertilityCurvePoint
-{
-    public int ageLimit;
-    [Range(0, 1)]
-    public float fertilityRate;
-}
-
-[System.Serializable]
-public class MultipleBirthRate
-{
-    [Range(0, 1)]
-    public float probability;
-    public int count;
-}
-
-[System.Serializable]
-public class GenerationSurvivalRate
-{
-    public int generation;
-    [Range(0, 1)]
-    public float survivalRate;
+        switch (generation)
+        {
+            case 1: return generation1SurvivalRate;
+            case 2: return generation2SurvivalRate;
+            case 3: return generation3SurvivalRate;
+            case 4: return generation4SurvivalRate;
+            case 5: return generation5SurvivalRate;
+            default: return 0.5f;
+        }
+    }
 }
