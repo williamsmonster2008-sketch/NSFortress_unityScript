@@ -9,6 +9,12 @@ public class CharacterRuntimeData
     [ReadOnly] public string characterId;
     public string name;
     public string familyName;
+    public string surname;
+    public string originalFamily;
+    public string maidenFamily;
+    public string socialClass;
+    public bool isRuzhui;
+    public bool isExternalSpouse;
     public int age;
     public Gender gender;
     

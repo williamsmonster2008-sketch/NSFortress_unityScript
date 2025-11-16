@@ -3,6 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using Sirenix.OdinInspector;
 
+[System.Serializable]
+public struct GeneratedNameEntry
+{
+    public string fullName;
+    public string surname;
+    public string generationChar;
+}
+
 [CreateAssetMenu(fileName = "CharacterNameDatabase", menuName = "Game/Character Name Database")]
 public class CharacterNameDatabase : ScriptableObject
 {
@@ -68,8 +76,8 @@ public class CharacterNameDatabase : ScriptableObject
             
             string socialClass = fields[0].Trim();
             string surname = fields[2].Trim();
-            // 添加这行调试
-            if (i <= 10) // 只打印前10行
+            // �������е���
+            if (i <= 10) // ֻ��ӡǰ10��
             {
                 Debug.Log($"  第{i}行: socialClass='{socialClass}', surname='{surname}'");
             }
@@ -148,7 +156,7 @@ public class CharacterNameDatabase : ScriptableObject
             if (maleCount > 0)
             {
                 var maleNames = namesByClassAndGender[socialClass]["男"].Take(5);
-                Debug.Log($"    男名示例: {string.Join(", ", maleNames)}");
+                Debug.Log($"     男名示例: {string.Join(", ", maleNames)}");
             }
             if (femaleCount > 0)
             {
@@ -178,24 +186,23 @@ public class CharacterNameDatabase : ScriptableObject
         Debug.Log($"✅ 加载 {generationConfig.eliteGenerationNames.Count} 组士族辈分字");
     }
     
-    public string GenerateFullName(string socialClass, Gender gender, string familyName, int generation, System.Random rand)
+    public GeneratedNameEntry GenerateNameEntry(string socialClass, Gender gender, string familyName, int generation, System.Random rand, string forcedSurname = null)
     {
         if (!initialized) Initialize();
         
-        // 如果familyName已经提供，直接使用；否则生成新姓氏
-        string surname = string.IsNullOrEmpty(familyName) 
-            ? GetRandomSurname(socialClass, rand) 
-            : familyName;
+        string surname = !string.IsNullOrEmpty(forcedSurname)
+            ? forcedSurname
+            : (string.IsNullOrEmpty(familyName)
+                ? GetRandomSurname(socialClass, rand)
+                : familyName);
         
-        string generationChar = "";
+        string generationChar = string.Empty;
         if (socialClass != "胡族")
         {
-            // 修复：使用surname而不是familyName
             generationChar = GetGenerationChar(surname, socialClass, generation, rand);
         }
         
         string givenName = GetRandomGivenName(socialClass, gender, rand);
-        
         int attempts = 0;
         while (givenName == generationChar && attempts < 5)
         {
@@ -208,8 +215,17 @@ public class CharacterNameDatabase : ScriptableObject
             givenName = gender == Gender.Male ? "之" : "华";
         }
         
-        // 组合：姓 + 辈分字 + 名
-        return surname + generationChar + givenName;
+        return new GeneratedNameEntry
+        {
+            fullName = surname + generationChar + givenName,
+            surname = surname,
+            generationChar = generationChar
+        };
+    }
+    
+    public string GenerateFullName(string socialClass, Gender gender, string familyName, int generation, System.Random rand)
+    {
+        return GenerateNameEntry(socialClass, gender, familyName, generation, rand).fullName;
     }
     
     private string GetGenerationChar(string familyName, string socialClass, int generation, System.Random rand)
@@ -269,13 +285,11 @@ public class CharacterNameDatabase : ScriptableObject
         Debug.Log($"🔍 GetRandomSurname - socialClass: '{socialClass}', 是否包含key: {surnamesByClass.ContainsKey(socialClass)}");
         
         if (surnamesByClass.ContainsKey(socialClass))
-        {
-            Debug.Log($"  姓氏池大小: {surnamesByClass[socialClass].Count}");
+        {            
             if (surnamesByClass[socialClass].Count > 0)
             {
                 int index = rand.Next(surnamesByClass[socialClass].Count);
-                string surname = surnamesByClass[socialClass][index];
-                Debug.Log($"  ✅ 选中索引{index}: {surname}");
+                string surname = surnamesByClass[socialClass][index];                
                 return surname;
             }
         }
@@ -286,28 +300,24 @@ public class CharacterNameDatabase : ScriptableObject
     
     public string GetRandomGivenName(Gender gender, System.Random rand)
     {
-        return GetRandomGivenName("平民", gender, rand);  // 改为"平民"
+        return GetRandomGivenName("平民", gender, rand);  
     }
     
     public string GetRandomGivenName(string socialClass, Gender gender, System.Random rand)
     {
         if (!initialized) Initialize();
         
-        string genderKey = gender == Gender.Male ? "男" : "女";
-        Debug.Log($"🔍 GetRandomGivenName - socialClass: '{socialClass}', gender: {genderKey}, 是否包含key: {namesByClassAndGender.ContainsKey(socialClass)}");
+        string genderKey = gender == Gender.Male ? "男" : "女";        
         
         if (namesByClassAndGender.ContainsKey(socialClass))
-        {
-            Debug.Log($"  是否包含gender key: {namesByClassAndGender[socialClass].ContainsKey(genderKey)}");
+        {           
             if (namesByClassAndGender[socialClass].ContainsKey(genderKey))
             {
-                int count = namesByClassAndGender[socialClass][genderKey].Count;
-                Debug.Log($"  名字池大小: {count}");
+                int count = namesByClassAndGender[socialClass][genderKey].Count;                
                 if (count > 0)
                 {
                     int index = rand.Next(count);
-                    string name = namesByClassAndGender[socialClass][genderKey][index];
-                    Debug.Log($"  ✅ 选中索引{index}: {name}");
+                    string name = namesByClassAndGender[socialClass][genderKey][index];                    
                     return name;
                 }
             }

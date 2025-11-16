@@ -128,7 +128,24 @@ public class CharacterGenerator : MonoBehaviour
         
         // 使用新的名称生成系统（姓 + 辈分字 + 名）        
         Debug.Log($"🔍 生成名字 - familyName参数: '{familyName}', socialClass: {socialClass}, generation: {generation}");
-        character.name = nameDatabase.GenerateFullName(socialClass, character.gender, familyName, generation, random);
+        var nameEntry = nameDatabase.GenerateNameEntry(socialClass, character.gender, familyName, generation, random);
+        character.name = nameEntry.fullName;
+        character.surname = nameEntry.surname;
+        if (string.IsNullOrEmpty(character.familyName))
+        {
+            character.familyName = nameEntry.surname;
+        }
+        if (string.IsNullOrEmpty(character.originalFamily))
+        {
+            character.originalFamily = $"{character.surname}氏";
+        }
+        if (character.gender == Gender.Female && string.IsNullOrEmpty(character.maidenFamily))
+        {
+            character.maidenFamily = character.originalFamily;
+        }
+        character.socialClass = socialClass;
+        character.isExternalSpouse = false;
+        character.isRuzhui = false;
         Debug.Log($"✅ 生成结果: {character.name}");
 
         // 生成状态

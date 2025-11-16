@@ -528,13 +528,36 @@ public class FamilyGenerator : MonoBehaviour
         };
         
         // 生成名字
-        character.name = nameDatabase.GenerateFullName(
-            socialClass, 
-            memberData.gender, 
-            familyName, 
-            memberData.generation, 
-            random
-        );
+        if (nameDatabase != null)
+        {
+            var nameEntry = nameDatabase.GenerateNameEntry(
+                socialClass,
+                memberData.gender,
+                familyName,
+                memberData.generation,
+                random);
+            character.name = nameEntry.fullName;
+            character.surname = nameEntry.surname;
+        }
+        
+        if (string.IsNullOrEmpty(character.surname))
+        {
+            character.surname = familyName;
+        }
+        
+        if (string.IsNullOrEmpty(character.originalFamily))
+        {
+            character.originalFamily = $"{character.surname}氏";
+        }
+        
+        if (character.gender == Gender.Female && string.IsNullOrEmpty(character.maidenFamily))
+        {
+            character.maidenFamily = character.originalFamily;
+        }
+        
+        character.socialClass = socialClass;
+        character.isExternalSpouse = false;
+        character.isRuzhui = false;
         
         return character;
     }
