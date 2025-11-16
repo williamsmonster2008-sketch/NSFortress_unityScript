@@ -43,7 +43,13 @@ public static class VirtueConfigLoader
             return null;
         }
         
-        var root = Json.Deserialize(jsonAsset.text) as Dictionary<string, object>;
+        var jsonText = jsonAsset.text ?? string.Empty;
+        if (jsonText.Length > 0 && jsonText[0] == '\ufeff')
+        {
+            jsonText = jsonText.Substring(1);
+        }
+        
+        var root = Json.Deserialize(jsonText) as Dictionary<string, object>;
         if (root == null)
         {
             Debug.LogError("VirtueConfigLoader: 解析失败");

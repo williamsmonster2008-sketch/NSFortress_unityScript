@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 /// <summary>
@@ -64,11 +65,17 @@ public class VirtueSystem : MonoBehaviour
     
     private VirtueProfile CreateProfile(CharacterRuntimeData character)
     {
+        if (character.virtues == null)
+        {
+            character.virtues = new VirtueTraits();
+        }
+        
         var profile = new VirtueProfile(character.characterId);
         foreach (var trait in configData.traitMap.Values)
         {
-            float value = character.virtues?.GetValue(trait.id) ?? RandomizeInitialValue(trait);
+            float value = character.virtues.GetValue(trait.id) ?? RandomizeInitialValue(trait);
             profile.SetTrait(trait, value);
+            character.virtues.SetValue(trait.id, value);
         }
         return profile;
     }
@@ -76,6 +83,30 @@ public class VirtueSystem : MonoBehaviour
     private float RandomizeInitialValue(VirtueTraitDefinition definition)
     {
         return Random.Range(definition.initialRange.x, definition.initialRange.y);
+    }
+    
+    public void LogProfileSummary(CharacterRuntimeData character, int topTraits = 5)
+    {
+        if (character == null)
+        {
+            Debug.LogWarning("VirtueSystem.LogProfileSummary: character is null");
+            return;
+        }
+        
+        var profile = GetProfile(character.characterId);
+        if (profile == null)
+        {
+            Debug.LogWarning($"VirtueSystem: 缺少 {character.name} ({character.characterId}) 的德行档案");
+            return;
+        }
+        
+        var summary = profile
+            .EnumerateTraits()
+            .OrderByDescending(t => Mathf.Abs(t.value))
+            .Take(Mathf.Max(1, topTraits))
+            .Select(t => $"{t.definition.name}:{t.value:F1}");
+        
+        Debug.Log($"VirtueSystem: {character.name} 的主要德行 -> {string.Join(" | ", summary)}");
     }
 }
 

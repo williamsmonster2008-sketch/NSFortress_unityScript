@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -117,20 +117,10 @@ public class GameManager : MonoBehaviour
             {
                 virtueSystem.Initialize(allCharacters);
                 
-                if (allCharacters.Count > 0)
+                int sampleCount = Mathf.Min(3, allCharacters.Count);
+                for (int i = 0; i < sampleCount; i++)
                 {
-                    var sampleId = allCharacters[0].characterId;
-                    var profile = virtueSystem.GetProfile(sampleId);
-                    if (profile != null)
-                    {
-                        int count = 0;
-                        foreach (var trait in profile.EnumerateTraits())
-                        {
-                            Debug.Log($"{allCharacters[0].name} 德行 {trait.definition.name}: {trait.value:F1}");
-                            count++;
-                            if (count >= 3) break;
-                        }
-                    }
+                    virtueSystem.LogProfileSummary(allCharacters[i], 5);
                 }
             }
         }
