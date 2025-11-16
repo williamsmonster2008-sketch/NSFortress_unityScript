@@ -13,7 +13,19 @@ public class FamilyGenerator : MonoBehaviour
     public CharacterNameDatabase nameDatabase;
     public SocialClassConfig socialClassConfig;
     
+    [Header("人口规划")]
+    public PopulationPlanConfig refugeePlan;
+    public PopulationPlanConfig settlementPlan;
+    public bool settlementMode = false;
+    
     private System.Random random;
+    private PopulationPlanConfig ActivePlan => (settlementMode && settlementPlan != null) ? settlementPlan : refugeePlan;
+    private readonly Dictionary<string, HashSet<string>> externalSurnameCache = new Dictionary<string, HashSet<string>>();
+    
+    public void SetSettlementMode(bool enabled)
+    {
+        settlementMode = enabled;
+    }
     
     public void Initialize(int seed)
     {
@@ -58,8 +70,9 @@ public class FamilyGenerator : MonoBehaviour
     /// </summary>
     public List<CharacterRuntimeData> GenerateCompleteFamily(string familyName, string socialClass, int targetSize)
     {
+        PrepareExternalSurnameCache(familyName);
         // 阶段1: 生成年龄结构和关系网络
-        FiveGenerationAgeStructure ageStructure = GenerateFiveGenerationStructure(familyName, targetSize);
+        FiveGenerationAgeStructure ageStructure = GenerateFiveGenerationStructure(familyName, targetSize, socialClass);
         
         Debug.Log($"📊 {familyName} 生成了 {ageStructure.GetTotalCount()} 人 (目标:{targetSize})");
         
@@ -85,7 +98,7 @@ public class FamilyGenerator : MonoBehaviour
     /// <summary>
     /// 生成5代家族结构 (年龄数据 + 关系网络)
     /// </summary>
-    private FiveGenerationAgeStructure GenerateFiveGenerationStructure(string familyName, int targetSize)
+    private FiveGenerationAgeStructure GenerateFiveGenerationStructure(string familyName, int targetSize, string socialClass)
     {
         FamilyIdManager idManager = new FamilyIdManager();
         
@@ -110,7 +123,7 @@ public class FamilyGenerator : MonoBehaviour
         
         // 3. 生成前2代结构 (高祖 + 曾祖)
         FamilyStructure structure = GenerateInitialTwoGenerations(
-            idManager, familyName, gen1FatherAge, gen1MotherAge
+            idManager, familyName, socialClass, gen1FatherAge, gen1MotherAge
         );
         
         // 4. 递推生成第3-5代
@@ -126,11 +139,13 @@ public class FamilyGenerator : MonoBehaviour
     private FamilyStructure GenerateInitialTwoGenerations(
         FamilyIdManager idManager,
         string familyName,
+        string socialClass,
         int gen1FatherAge,
         int gen1MotherAge)
     {
         FamilyStructure structure = new FamilyStructure();
         structure.familyName = familyName;
+        structure.socialClass = socialClass;
         
         // === 第1代: 高祖夫妇 (固定2人) ===
         string gen1Father = idManager.AllocateId("patriarch_gen1");
@@ -162,7 +177,9 @@ public class FamilyGenerator : MonoBehaviour
                 string gen2Wife = idManager.AllocateId($"wife_gen2_{i}");
                 int wifeAge = CalculateSpouseAge(sonAge, fertilityConfig.minBreedingAge);
                 
-                structure.AddMember(new MemberAgeData(gen2Wife, wifeAge, Gender.Female, 2, false));
+                var wifeData = new MemberAgeData(gen2Wife, wifeAge, Gender.Female, 2, false);
+                AssignExternalIdentity(wifeData, familyName, socialClass);
+                structure.AddMember(wifeData);
                 structure.AddMarriage(gen2Son, gen2Wife, 2);
             }
         }
@@ -263,8 +280,14 @@ public class FamilyGenerator : MonoBehaviour
                 string wifeId = idManager.AllocateId($"wife_{childId}");
                 int wifeAge = CalculateSpouseAge(childAge, fertilityConfig.minBreedingAge);
                 
-                structure.AddMember(new MemberAgeData(wifeId, wifeAge, Gender.Female, childGeneration, false));
+                var wifeData = new MemberAgeData(wifeId, wifeAge, Gender.Female, childGeneration, false);
+                AssignExternalIdentity(wifeData, structure.familyName, structure.socialClass);
+                structure.AddMember(wifeData);
                 structure.AddMarriage(childId, wifeId, childGeneration);
+            }
+            else if (childGender == Gender.Female && childAge >= fertilityConfig.minBreedingAge && childGeneration < 5)
+            {
+                TryAssignRuzhuiSpouse(structure, idManager, childId, childGeneration);
             }
         }
         
@@ -497,6 +520,21 @@ public class FamilyGenerator : MonoBehaviour
     /// </summary>
     private CharacterRuntimeData CreateCharacter(string familyName, string socialClass, MemberAgeData memberData)
     {
+        bool external = !memberData.isNative;
+        string assignedSocialClass = socialClass;
+        string birthSurname = familyName;
+        if (external)
+        {
+            assignedSocialClass = !string.IsNullOrEmpty(memberData.externalSocialClass)
+                ? memberData.externalSocialClass
+                : ResolveExternalSocialClass(socialClass);
+            
+            bool enforceUnique = ActivePlan == null || ActivePlan.forbidSameSurname;
+            birthSurname = !string.IsNullOrEmpty(memberData.assignedSurname)
+                ? memberData.assignedSurname
+                : GetDistinctSurname(assignedSocialClass, familyName, enforceUnique);
+        }
+        
         CharacterRuntimeData character = new CharacterRuntimeData
         {
             characterId = System.Guid.NewGuid().ToString(),
@@ -505,7 +543,6 @@ public class FamilyGenerator : MonoBehaviour
             gender = memberData.gender,
             generation = memberData.generation,
             
-            // 生理状态
             physical = new PhysicalState
             {
                 health = random.Next(60, 100),
@@ -513,51 +550,57 @@ public class FamilyGenerator : MonoBehaviour
                 hunger = random.Next(50, 80)
             },
             
-            // 情绪状态
             emotional = new EmotionalState
             {
                 happiness = random.Next(30, 70)
             },
             
-            // 德行
             skills = new List<CharacterSkill>(),
             childrenIds = new List<string>(),
-            
             vitalStatus = "living",
             position = Vector3.zero
         };
         
-        // 生成名字
         if (nameDatabase != null)
         {
             var nameEntry = nameDatabase.GenerateNameEntry(
-                socialClass,
+                assignedSocialClass,
                 memberData.gender,
-                familyName,
+                birthSurname,
                 memberData.generation,
-                random);
+                random,
+                birthSurname);
             character.name = nameEntry.fullName;
             character.surname = nameEntry.surname;
         }
-        
-        if (string.IsNullOrEmpty(character.surname))
+        else
         {
-            character.surname = familyName;
+            character.name = $"{birthSurname}{random.Next(1000, 9999)}";
+            character.surname = birthSurname;
         }
         
-        if (string.IsNullOrEmpty(character.originalFamily))
+        character.socialClass = assignedSocialClass;
+        character.isExternalSpouse = external;
+        character.isRuzhui = external && memberData.gender == Gender.Male;
+        
+        if (external)
         {
-            character.originalFamily = $"{character.surname}氏";
+            if (string.IsNullOrEmpty(character.originalFamily))
+            {
+                character.originalFamily = !string.IsNullOrEmpty(memberData.originalFamily)
+                    ? memberData.originalFamily
+                    : $"{birthSurname}氏";
+            }
+        }
+        else if (string.IsNullOrEmpty(character.originalFamily))
+        {
+            character.originalFamily = $"{familyName}氏";
         }
         
         if (character.gender == Gender.Female && string.IsNullOrEmpty(character.maidenFamily))
         {
             character.maidenFamily = character.originalFamily;
         }
-        
-        character.socialClass = socialClass;
-        character.isExternalSpouse = false;
-        character.isRuzhui = false;
         
         return character;
     }
@@ -814,6 +857,159 @@ public class FamilyGenerator : MonoBehaviour
     }
     
     // ==================== 辅助方法 ====================
+    
+    private void PrepareExternalSurnameCache(string familyName)
+    {
+        var set = GetExternalSurnameSet(familyName);
+        set.Clear();
+        if (!string.IsNullOrEmpty(familyName))
+        {
+            set.Add(familyName);
+        }
+    }
+    
+    private HashSet<string> GetExternalSurnameSet(string familyName)
+    {
+        string key = string.IsNullOrEmpty(familyName) ? "_default" : familyName;
+        if (!externalSurnameCache.TryGetValue(key, out var set))
+        {
+            set = new HashSet<string>();
+            externalSurnameCache[key] = set;
+        }
+        return set;
+    }
+    
+    private void AssignExternalIdentity(
+        MemberAgeData member,
+        string hostFamilyName,
+        string hostSocialClass,
+        string forcedSocialClass = null)
+    {
+        if (member == null)
+        {
+            return;
+        }
+        
+        var identity = GenerateExternalIdentity(hostFamilyName, hostSocialClass, forcedSocialClass);
+        member.assignedSurname = identity.surname;
+        member.originalFamily = identity.originalFamily;
+        member.externalSocialClass = identity.socialClass;
+    }
+    
+    private ExternalIdentity GenerateExternalIdentity(string hostFamilyName, string hostSocialClass, string preferredClass = null)
+    {
+        string resolvedClass = ResolveExternalSocialClass(hostSocialClass, preferredClass);
+        bool enforceUnique = ActivePlan == null || ActivePlan.forbidSameSurname;
+        string surname = GetDistinctSurname(resolvedClass, hostFamilyName, enforceUnique);
+        if (string.IsNullOrEmpty(surname))
+        {
+            surname = hostFamilyName;
+        }
+        
+        return new ExternalIdentity
+        {
+            surname = surname,
+            originalFamily = string.IsNullOrEmpty(surname) ? hostFamilyName : $"{surname}氏",
+            socialClass = resolvedClass
+        };
+    }
+    
+    private string ResolveExternalSocialClass(string hostSocialClass, string preferredClass = null)
+    {
+        if (!string.IsNullOrEmpty(preferredClass))
+        {
+            return preferredClass;
+        }
+        
+        var plan = ActivePlan;
+        if (plan == null || string.IsNullOrEmpty(hostSocialClass))
+        {
+            return hostSocialClass;
+        }
+        
+        return plan.GetMatchedClass(hostSocialClass, random);
+    }
+    
+    private void TryAssignRuzhuiSpouse(FamilyStructure structure, FamilyIdManager idManager, string daughterId, int generation)
+    {
+        if (!settlementMode || ActivePlan == null || structure == null || idManager == null)
+        {
+            return;
+        }
+        
+        if (structure.relationships.HasSpouse(daughterId))
+        {
+            return;
+        }
+        
+        string preferredClass = ActivePlan.GetMatchedClass(structure.socialClass, random);
+        float ruzhuiProbability = ActivePlan.GetRuzhuiProbability(structure.socialClass, preferredClass);
+        if (ruzhuiProbability <= 0f)
+        {
+            return;
+        }
+        
+        if (random.NextDouble() > ruzhuiProbability)
+        {
+            return;
+        }
+        
+        var daughter = structure.GetMember(daughterId);
+        if (daughter == null)
+        {
+            return;
+        }
+        
+        string husbandId = idManager.AllocateId($"ruzhui_{daughterId}");
+        int husbandAge = CalculateSpouseAge(daughter.age, fertilityConfig.minBreedingAge);
+        var husbandData = new MemberAgeData(husbandId, husbandAge, Gender.Male, generation, false);
+        AssignExternalIdentity(husbandData, structure.familyName, structure.socialClass, preferredClass);
+        structure.AddMember(husbandData);
+        structure.AddMarriage(husbandId, daughterId, generation);
+    }
+    
+    private string GetDistinctSurname(string desiredClass, string hostFamilyName, bool enforceUnique)
+    {
+        if (nameDatabase == null)
+        {
+            return hostFamilyName;
+        }
+        
+        HashSet<string> usedSet = enforceUnique ? GetExternalSurnameSet(hostFamilyName) : null;
+        string surname = null;
+        int attempts = 0;
+        do
+        {
+            string targetClass = string.IsNullOrEmpty(desiredClass) ? "平民" : desiredClass;
+            surname = nameDatabase.GetRandomFamilyName(targetClass, random);
+            attempts++;
+            bool matchesHost = !string.IsNullOrEmpty(hostFamilyName) && surname == hostFamilyName;
+            bool repeats = enforceUnique && usedSet != null && usedSet.Contains(surname);
+            if (!matchesHost && !repeats)
+            {
+                break;
+            }
+        } while (attempts < 24);
+        
+        if (string.IsNullOrEmpty(surname))
+        {
+            surname = string.IsNullOrEmpty(hostFamilyName) ? "李" : hostFamilyName;
+        }
+        
+        if (enforceUnique && usedSet != null && !string.IsNullOrEmpty(surname))
+        {
+            usedSet.Add(surname);
+        }
+        
+        return surname;
+    }
+    
+    private struct ExternalIdentity
+    {
+        public string surname;
+        public string originalFamily;
+        public string socialClass;
+    }
     
     /// <summary>
     /// 获取随机姓氏

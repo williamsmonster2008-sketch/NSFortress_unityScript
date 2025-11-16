@@ -41,6 +41,7 @@ public class FiveGenerationAgeStructure
     /// 家族姓氏
     /// </summary>
     public string familyName;
+    public string socialClass;
     
     /// <summary>
     /// 获取所有成员
@@ -75,6 +76,7 @@ public class FiveGenerationAgeStructure
     {
         var ageStructure = new FiveGenerationAgeStructure();
         ageStructure.familyName = structure.familyName;
+        ageStructure.socialClass = structure.socialClass;
         ageStructure.relationships = structure.relationships;
         
         // 按代际分组

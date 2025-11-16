@@ -182,6 +182,20 @@ public class FamilySystem : MonoBehaviour
         characters.TryGetValue(characterId, out var data);
         return data;
     }
+    
+    public FamilyIdentity BuildFamilyIdentity(string characterId)
+    {
+        if (string.IsNullOrEmpty(characterId) || !characters.TryGetValue(characterId, out var data))
+        {
+            return FamilyIdentity.Empty;
+        }
+        return FamilyIdentity.Create(data);
+    }
+    
+    public FamilyIdentity BuildFamilyIdentity(CharacterRuntimeData member)
+    {
+        return FamilyIdentity.Create(member);
+    }
 }
 
 /// <summary>
@@ -279,4 +293,67 @@ public struct FamilySummary
     public int totalMembers;
     public int livingMembers;
     public IReadOnlyDictionary<int, int> generationSpread;
+}
+
+public struct FamilyIdentity
+{
+    public string statusText;
+    public string originText;
+    public string tagText;
+    public bool isLiving;
+    public bool isExternal;
+    public bool isRuzhui;
+    
+    public static FamilyIdentity Empty => new FamilyIdentity();
+    
+    public static FamilyIdentity Create(CharacterRuntimeData member)
+    {
+        if (member == null)
+        {
+            return Empty;
+        }
+        
+        bool living = member.vitalStatus == "living";
+        string status = living
+            ? $"在世 {Mathf.Max(1, member.age)}岁"
+            : $"已故 享年{Mathf.Max(1, member.age)}岁";
+        
+        string origin = ResolveOrigin(member);
+        string tag = string.Empty;
+        if (member.isRuzhui)
+        {
+            tag = "赘婿";
+        }
+        else if (member.isExternalSpouse)
+        {
+            tag = "外姓配偶";
+        }
+        
+        return new FamilyIdentity
+        {
+            statusText = status,
+            originText = string.IsNullOrEmpty(origin) ? string.Empty : $"原籍{origin}",
+            tagText = tag,
+            isLiving = living,
+            isExternal = member.isExternalSpouse,
+            isRuzhui = member.isRuzhui
+        };
+    }
+    
+    private static string ResolveOrigin(CharacterRuntimeData member)
+    {
+        string hostTag = string.IsNullOrEmpty(member.familyName) ? string.Empty : $"{member.familyName}氏";
+        
+        if (!string.IsNullOrEmpty(member.originalFamily) && member.originalFamily != hostTag)
+        {
+            return member.originalFamily;
+        }
+        
+        if (member.gender == Gender.Female && !string.IsNullOrEmpty(member.maidenFamily) && member.maidenFamily != hostTag)
+        {
+            return member.maidenFamily;
+        }
+        
+        return string.Empty;
+    }
 }

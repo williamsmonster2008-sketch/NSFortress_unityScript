@@ -5,7 +5,7 @@
 public class MemberAgeData
 {
     /// <summary>
-    /// 临时ID - 用于建立关系网络
+    /// 临时ID - 用于建立关系网
     /// </summary>
     public string tempId;
     
@@ -20,7 +20,7 @@ public class MemberAgeData
     public Gender gender;
     
     /// <summary>
-    /// 代际 (1=高祖, 2=曾祖, 3=祖父母, 4=父母, 5=子女)
+    /// 辈分 (1=高祖, 2=曾祖, 3=祖辈, 4=父辈, 5=子辈)
     /// </summary>
     public int generation;
     
@@ -30,12 +30,22 @@ public class MemberAgeData
     public bool isNative;
     
     /// <summary>
-    /// 原生家族姓氏 (外来配偶的原姓)
+    /// 原籍（外来配偶的来源）
     /// </summary>
     public string originalFamily;
     
     /// <summary>
-    /// 出生顺序 (同辈兄弟姐妹中的排行)
+    /// 外来配偶预先分配的姓氏
+    /// </summary>
+    public string assignedSurname;
+    
+    /// <summary>
+    /// 外来配偶的社会阶层
+    /// </summary>
+    public string externalSocialClass;
+    
+    /// <summary>
+    /// 出生顺序 (在兄弟姐妹中的排序)
     /// </summary>
     public int birthOrder;
     
@@ -50,11 +60,13 @@ public class MemberAgeData
         this.generation = generation;
         this.isNative = isNative;
         this.originalFamily = null;
+        this.assignedSurname = null;
+        this.externalSocialClass = null;
         this.birthOrder = 0;
     }
     
     /// <summary>
-    /// 带原生家族的构造函数
+    /// 指定原籍时的构造函数
     /// </summary>
     public MemberAgeData(string tempId, int age, Gender gender, int generation, bool isNative, string originalFamily)
     {
@@ -64,6 +76,8 @@ public class MemberAgeData
         this.generation = generation;
         this.isNative = isNative;
         this.originalFamily = originalFamily;
+        this.assignedSurname = null;
+        this.externalSocialClass = null;
         this.birthOrder = 0;
     }
 }

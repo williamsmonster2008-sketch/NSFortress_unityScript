@@ -21,6 +21,7 @@ public class FamilyStructure
     /// 家族姓氏
     /// </summary>
     public string familyName;
+    public string socialClass;
     
     /// <summary>
     /// 添加成员

@@ -4,7 +4,7 @@ using TMPro;
 using System.Linq;
 
 /// <summary>
-/// 右侧人物信息面板
+/// 角色信息面板
 /// </summary>
 public class CharacterInfoPanel : MonoBehaviour
 {
@@ -23,17 +23,15 @@ public class CharacterInfoPanel : MonoBehaviour
     
     private FamilySystem familySystem;
     
-    
     public void ShowCharacter(CharacterRuntimeData character, FamilySystem system)
     {
         familySystem = system;
-
-        // 调试:检查是否有已故角色
+        
         if (system != null)
         {
-            var allChars = system.GetAllCharacters(); // 需要添加这个方法
+            var allChars = system.GetAllCharacters();
             var deceasedCount = allChars.Count(c => c.vitalStatus != "living");
-            Debug.Log($"总角色数: {allChars.Count}, 已故: {deceasedCount}");
+            Debug.Log($"角色总数: {allChars.Count}, 已故: {deceasedCount}");
         }
         
         if (panelRoot != null)
@@ -46,32 +44,30 @@ public class CharacterInfoPanel : MonoBehaviour
             return;
         }
         
-        familyText?.SetText($"家族：{character.familyName}氏");
-        nameText?.SetText($"{character.name}");
-        ageText?.SetText($"{character.age}岁");
-        genderText?.SetText($"{(character.gender == Gender.Male ? "男" : "女")}");
-        generationText?.SetText($"族辈：第{character.generation}代");
+        familyText?.SetText($"家族: {character.familyName}氏");
+        nameText?.SetText($"姓名: {character.name}");
+        ageText?.SetText($"年龄: {character.age}岁");
+        genderText?.SetText($"性别: {(character.gender == Gender.Male ? "男" : "女")}");
+        generationText?.SetText($"辈分: 第{character.generation}代");
         
         fatherText?.SetText(BuildParentInfo("父亲", character.fatherId));
         motherText?.SetText(BuildParentInfo("母亲", character.motherId));
         siblingsText?.SetText(BuildRelativeList("兄弟姐妹", CollectSiblings(character)));
         childrenText?.SetText(BuildRelativeList("子女", CollectChildren(character)));
         
-        // 显示德行信息
         var profile = GameManager.Instance.virtueSystem.GetProfile(character.characterId);
         if (profile != null)
         {
             var topCategory = profile.GetTopCategory(GameManager.Instance.virtueSystem.configData);
             var topTraits = profile.GetTopTraitDescriptions(3);
             
-            string display = $"识别人格：{topCategory.categoryName}\n";
+            string display = $"德性侧重: {topCategory.categoryName}\n";
             display += string.Join("\n", topTraits);
-            
-            topVirtuesText.text = display;
+            topVirtuesText.SetText(display);
         }
         else
         {
-            topVirtuesText.text = "品行特质: 暂无";
+            topVirtuesText.SetText("德行特征: 暂无");
         }
     }
     
@@ -79,30 +75,26 @@ public class CharacterInfoPanel : MonoBehaviour
     {
         if (string.IsNullOrEmpty(parentId))
         {
-            return $"{label}：未知";
+            return $"{label}: 未知";
         }
         
         var parent = familySystem?.GetCharacter(parentId);
         if (parent == null)
         {
-            return $"{label}：未知";
+            return $"{label}: 未知";
         }
         
-        bool living = parent.vitalStatus == "living";
-        string status = living ? "在世" : "已故";
-        string ageInfo = living ? $"{parent.age}岁" : $"享年{parent.age}岁";
-        
-        return $"{label}：{parent.name}（{status}，{ageInfo}）";
+        return $"{label}: {BuildIdentityLine(parent)}";
     }
     
     private string BuildRelativeList(string label, List<string> relatives)
     {
         if (relatives == null || relatives.Count == 0)
         {
-            return $"{label}：无";
+            return $"{label}: 无";
         }
         
-        return $"{label}：{string.Join("、", relatives)}";
+        return $"{label}: {string.Join("、", relatives)}";
     }
     
     private List<string> CollectSiblings(CharacterRuntimeData character)
@@ -116,11 +108,13 @@ public class CharacterInfoPanel : MonoBehaviour
             {
                 return;
             }
+            
             var parent = familySystem?.GetCharacter(parentId);
             if (parent == null || parent.childrenIds == null)
             {
                 return;
             }
+            
             foreach (var childId in parent.childrenIds)
             {
                 if (childId == character.characterId || !ids.Add(childId))
@@ -131,7 +125,7 @@ public class CharacterInfoPanel : MonoBehaviour
                 var child = familySystem?.GetCharacter(childId);
                 if (child != null)
                 {
-                    result.Add(BuildBasicLine(child));
+                    result.Add(BuildIdentityLine(child));
                 }
             }
         }
@@ -154,18 +148,39 @@ public class CharacterInfoPanel : MonoBehaviour
             var child = familySystem?.GetCharacter(childId);
             if (child != null)
             {
-                list.Add(BuildBasicLine(child));
+                list.Add(BuildIdentityLine(child));
             }
         }
         return list;
     }
     
-    private string BuildBasicLine(CharacterRuntimeData data)
+    private string BuildIdentityLine(CharacterRuntimeData data)
     {
-        bool living = data.vitalStatus == "living";
-        string status = living ? "在世" : "已故";
-        string ageInfo = living ? $"{data.age}岁" : $"享年{data.age}岁";
-        return $"{data.name}（{status}，{ageInfo}）";
+        if (data == null)
+        {
+            return "未知";
+        }
+        
+        FamilyIdentity identity = familySystem != null
+            ? familySystem.BuildFamilyIdentity(data)
+            : FamilyIdentity.Create(data);
+        
+        List<string> tags = new List<string>();
+        if (!string.IsNullOrEmpty(identity.tagText))
+        {
+            tags.Add(identity.tagText);
+        }
+        if (!string.IsNullOrEmpty(identity.originText))
+        {
+            tags.Add(identity.originText);
+        }
+        
+        string tagSection = tags.Count > 0 ? $" ({string.Join(" | ", tags)})" : string.Empty;
+        string status = string.IsNullOrEmpty(identity.statusText)
+            ? (data.vitalStatus == "living" ? $"在世 {data.age}岁" : $"已故 享年{data.age}岁")
+            : identity.statusText;
+        
+        return $"{data.name}{tagSection} - {status}";
     }
 }
 
