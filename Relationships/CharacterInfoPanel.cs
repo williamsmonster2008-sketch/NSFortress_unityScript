@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
+using System.Linq;
 
 /// <summary>
 /// 右侧人物信息面板
@@ -18,8 +19,10 @@ public class CharacterInfoPanel : MonoBehaviour
     public TextMeshProUGUI motherText;
     public TextMeshProUGUI siblingsText;
     public TextMeshProUGUI childrenText;
+    public TextMeshProUGUI topVirtuesText;
     
     private FamilySystem familySystem;
+    
     
     public void ShowCharacter(CharacterRuntimeData character, FamilySystem system)
     {
@@ -36,15 +39,32 @@ public class CharacterInfoPanel : MonoBehaviour
         }
         
         familyText?.SetText($"家族：{character.familyName}氏");
-        nameText?.SetText($"姓名：{character.name}");
-        ageText?.SetText($"年龄：{character.age}岁");
-        genderText?.SetText($"性别：{(character.gender == Gender.Male ? "男" : "女")}");
-        generationText?.SetText($"代际：第{character.generation}代");
+        nameText?.SetText($"{character.name}");
+        ageText?.SetText($"{character.age}岁");
+        genderText?.SetText($"{(character.gender == Gender.Male ? "男" : "女")}");
+        generationText?.SetText($"族辈：第{character.generation}代");
         
         fatherText?.SetText(BuildParentInfo("父亲", character.fatherId));
         motherText?.SetText(BuildParentInfo("母亲", character.motherId));
         siblingsText?.SetText(BuildRelativeList("兄弟姐妹", CollectSiblings(character)));
         childrenText?.SetText(BuildRelativeList("子女", CollectChildren(character)));
+        
+        // 显示德行信息
+        var profile = GameManager.Instance.virtueSystem.GetProfile(character.characterId);
+        if (profile != null)
+        {
+            var topCategory = profile.GetTopCategory(GameManager.Instance.virtueSystem.configData);
+            var topTraits = profile.GetTopTraitDescriptions(3);
+            
+            string display = $"识别人格：{topCategory.categoryName}\n";
+            display += string.Join("\n", topTraits);
+            
+            topVirtuesText.text = display;
+        }
+        else
+        {
+            topVirtuesText.text = "品行特质: 暂无";
+        }
     }
     
     private string BuildParentInfo(string label, string parentId)

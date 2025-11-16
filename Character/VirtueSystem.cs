@@ -10,7 +10,7 @@ public class VirtueSystem : MonoBehaviour
     [Header("配置")]
     public TextAsset virtueConfigJson;
     
-    private VirtueConfigData configData;
+    public VirtueConfigData configData { get; private set; }
     private readonly Dictionary<string, VirtueProfile> profiles = new Dictionary<string, VirtueProfile>();
     
     public void Initialize(IEnumerable<CharacterRuntimeData> characters)
@@ -129,7 +129,7 @@ public class VirtueProfile
     {
         return traits.TryGetValue(traitId, out var trait) ? trait.value : 0f;
     }
-    
+
     public void ApplyInfluence(string traitId, float change, float intensity)
     {
         if (traits.TryGetValue(traitId, out var trait))
@@ -141,6 +141,44 @@ public class VirtueProfile
     public IEnumerable<VirtueTraitState> EnumerateTraits()
     {
         return traits.Values;
+    }
+
+    // 获取最高德行类别
+    public (string categoryName, float score) GetTopCategory(VirtueConfigData configData)
+    {
+        var categoryScores = new Dictionary<string, float>();
+        
+        foreach (var category in configData.categories.Values)
+        {
+            float total = 0f;
+            int count = 0;
+            
+            foreach (var trait in category.traits)
+            {
+                if (traits.TryGetValue(trait.id, out var state))
+                {
+                    total += Mathf.Abs(state.value);
+                    count++;
+                }
+            }
+            
+            if (count > 0)
+                categoryScores[category.name] = total / count;
+        }
+        
+        var top = categoryScores.OrderByDescending(x => x.Value).FirstOrDefault();
+        return (top.Key ?? "无", top.Value);
+    }
+
+    // 获取最突出的3个trait描述
+    public List<string> GetTopTraitDescriptions(int count = 3)
+    {
+        return traits.Values
+            .Where(t => Mathf.Abs(t.value) >= 30) // 只显示明显倾向
+            .OrderByDescending(t => Mathf.Abs(t.value))
+            .Take(count)
+            .Select(t => t.value > 0 ? t.definition.positive : t.definition.negative)
+            .ToList();
     }
 }
 

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
-using MiniJSON;
+using System.Linq;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 public class VirtueConfigData
@@ -44,110 +45,67 @@ public static class VirtueConfigLoader
         }
         
         var jsonText = jsonAsset.text ?? string.Empty;
-        if (jsonText.Length > 0 && jsonText[0] == '\ufeff')
-        {
-            jsonText = jsonText.Substring(1);
-        }
         
-        var root = Json.Deserialize(jsonText) as Dictionary<string, object>;
-        if (root == null)
+        try
         {
-            Debug.LogError("VirtueConfigLoader: 解析失败");
-            return null;
-        }
-        
-        var data = new VirtueConfigData();
-        
-        if (root.TryGetValue("virtueCategories", out var categoriesObj) && categoriesObj is Dictionary<string, object> categoriesDict)
-        {
-            foreach (var pair in categoriesDict)
+            var root = JObject.Parse(jsonText);
+            var data = new VirtueConfigData();
+            
+            if (root["virtueCategories"] != null)
             {
-                var category = new VirtueCategoryDefinition
+                foreach (var categoryPair in ((JObject)root["virtueCategories"]).Properties())
                 {
-                    id = pair.Key
-                };
-                if (pair.Value is Dictionary<string, object> catDict)
-                {
-                    category.name = catDict.GetString("name");
-                    category.description = catDict.GetString("description");
-                    category.color = catDict.GetString("color");
-                    category.importance = Mathf.RoundToInt(catDict.GetFloat("importance"));
+                    var categoryKey = categoryPair.Name;
+                    var categoryObj = categoryPair.Value as JObject;
                     
-                    if (catDict.TryGetValue("traits", out var traitsObj) && traitsObj is IList traitList)
+                    var category = new VirtueCategoryDefinition
                     {
-                        foreach (var traitEntry in traitList)
+                        id = categoryKey,
+                        name = categoryObj["name"]?.ToString() ?? "",
+                        description = categoryObj["description"]?.ToString() ?? "",
+                        color = categoryObj["color"]?.ToString() ?? "#FFFFFF",
+                        importance = categoryObj["importance"]?.ToObject<int>() ?? 1
+                    };
+                    
+                    if (categoryObj["traits"] is JArray traitsArray)
+                    {
+                        foreach (JObject traitObj in traitsArray)
                         {
-                            if (traitEntry is Dictionary<string, object> traitDict)
+                            var trait = new VirtueTraitDefinition
                             {
-                                var trait = new VirtueTraitDefinition
-                                {
-                                    id = traitDict.GetString("id"),
-                                    name = traitDict.GetString("name"),
-                                    negative = traitDict.GetString("negative"),
-                                    positive = traitDict.GetString("positive"),
-                                    weight = traitDict.GetFloat("weight", 1f),
-                                    stability = traitDict.GetFloat("stability", 0.5f),
-                                    developmentRate = traitDict.GetFloat("developmentRate", 0.1f),
-                                    initialRange = traitDict.GetVector2("initialRange", new Vector2(-10f, 10f))
-                                };
-                                category.traits.Add(trait);
-                                data.traitMap[trait.id] = trait;
+                                id = traitObj["id"]?.ToString() ?? "",
+                                name = traitObj["name"]?.ToString() ?? "",
+                                negative = traitObj["negative"]?.ToString() ?? "",
+                                positive = traitObj["positive"]?.ToString() ?? "",
+                                weight = traitObj["weight"]?.ToObject<float>() ?? 1f,
+                                stability = traitObj["stability"]?.ToObject<float>() ?? 0.5f,
+                                developmentRate = traitObj["developmentRate"]?.ToObject<float>() ?? 0.1f
+                            };
+                            
+                            if (traitObj["initialRange"] is JArray rangeArray && rangeArray.Count >= 2)
+                            {
+                                trait.initialRange = new Vector2(
+                                    rangeArray[0].ToObject<float>(),
+                                    rangeArray[1].ToObject<float>()
+                                );
                             }
+                            
+                            category.traits.Add(trait);
+                            data.traitMap[trait.id] = trait;
                         }
                     }
+                    
+                    data.categories[category.id] = category;
                 }
-                data.categories[category.id] = category;
             }
+            
+            Debug.Log($"✓ 成功加载 {data.categories.Count} 个德行类别");
+            return data;
         }
-        
-        return data;
-    }
-}
-
-internal static class VirtueConfigExtensions
-{
-    public static string GetString(this Dictionary<string, object> dict, string key)
-    {
-        return dict != null && dict.TryGetValue(key, out var value) ? value as string ?? string.Empty : string.Empty;
-    }
-    
-    public static float GetFloat(this Dictionary<string, object> dict, string key, float defaultValue = 0f)
-    {
-        if (dict != null && dict.TryGetValue(key, out var value))
+        catch (System.Exception e)
         {
-            if (value is float f) return f;
-            if (value is double d) return (float)d;
-            if (value is long l) return l;
-            if (value is int i) return i;
-        }
-        return defaultValue;
-    }
-    
-    public static Vector2 GetVector2(this Dictionary<string, object> dict, string key, Vector2 defaultValue)
-    {
-        if (dict != null && dict.TryGetValue(key, out var value) && value is IList list && list.Count >= 2)
-        {
-            float x = ParseFloat(list[0]);
-            float y = ParseFloat(list[1]);
-            return new Vector2(x, y);
-        }
-        return defaultValue;
-    }
-    
-    private static float ParseFloat(object obj)
-    {
-        switch (obj)
-        {
-            case float f:
-                return f;
-            case double d:
-                return (float)d;
-            case long l:
-                return l;
-            case int i:
-                return i;
-            default:
-                return 0f;
+            Debug.LogError($"VirtueConfigLoader: 解析异常: {e.Message}\n{e.StackTrace}");
+            return null;
         }
     }
 }
