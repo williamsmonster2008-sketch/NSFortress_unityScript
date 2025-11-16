@@ -70,10 +70,7 @@ public class FamilyGenerator : MonoBehaviour
         members = ApplyGenerationSurvival(members);
         
         // 阶段3: 应用死亡率筛选
-        if (members.Count > targetSize)
-        {
-            members = ApplyMortalityAndResize(members, targetSize);
-        }
+        members = ApplyMortalityAndResize(members, targetSize);
         
         // 阶段3.5: 控制青少年占比
         members = ApplyYouthRatioLimit(members, 0.10f);
@@ -606,27 +603,27 @@ public class FamilyGenerator : MonoBehaviour
     /// </summary>
     private List<CharacterRuntimeData> ApplyGenerationSurvival(List<CharacterRuntimeData> members)
     {
-        if (members == null || members.Count == 0)
+        if (members == null)
         {
             return new List<CharacterRuntimeData>();
         }
         
-        List<CharacterRuntimeData> survivors = new List<CharacterRuntimeData>(members.Count);
         Dictionary<int, int> deathsByGeneration = new Dictionary<int, int>();
         
         foreach (var character in members)
         {
+            if (character == null)
+            {
+                continue;
+            }
+            
             float survivalRate = Mathf.Clamp01(fertilityConfig.GetSurvivalRate(character.generation));
             double roll = random != null ? random.NextDouble() : UnityEngine.Random.value;
+            bool survives = roll <= survivalRate;
+            character.vitalStatus = survives ? "living" : "deceased";
             
-            if (roll <= survivalRate)
+            if (!survives)
             {
-                character.vitalStatus = "living";
-                survivors.Add(character);
-            }
-            else
-            {
-                character.vitalStatus = "deceased";
                 if (deathsByGeneration.ContainsKey(character.generation))
                 {
                     deathsByGeneration[character.generation]++;
@@ -644,7 +641,7 @@ public class FamilyGenerator : MonoBehaviour
             Debug.Log($"[GenerationSurvival] {summary}");
         }
         
-        return survivors;
+        return members;
     }
     
     /// <summary>
@@ -660,14 +657,14 @@ public class FamilyGenerator : MonoBehaviour
         var livingMembers = members.Where(c => c.vitalStatus == "living").ToList();
         if (livingMembers.Count == 0)
         {
-            return livingMembers;
+            return members;
         }
         
         var youth = livingMembers.Where(c => c.age >= 5 && c.age <= 14).ToList();
         int allowedYouth = Mathf.CeilToInt(livingMembers.Count * Mathf.Clamp01(maxRatio));
         if (youth.Count <= allowedYouth)
         {
-            return livingMembers;
+            return members;
         }
         
         int excess = youth.Count - allowedYouth;
@@ -677,7 +674,7 @@ public class FamilyGenerator : MonoBehaviour
             child.vitalStatus = "deceased";
         }
         
-        return members.Where(c => c.vitalStatus == "living").ToList();
+        return members;
     }
     
     /// <summary>
@@ -726,13 +723,19 @@ public class FamilyGenerator : MonoBehaviour
         List<CharacterRuntimeData> fullFamily,
         int targetSize)
     {
-        if (fullFamily.Count <= targetSize)
+        if (fullFamily == null || fullFamily.Count == 0)
+        {
+            return fullFamily ?? new List<CharacterRuntimeData>();
+        }
+        
+        int livingCount = fullFamily.Count(c => c.vitalStatus == "living");
+        if (livingCount <= targetSize)
         {
             return fullFamily;
         }
         
-        int deathCount = fullFamily.Count - targetSize;
-        float mortalityRate = (float)deathCount / fullFamily.Count;
+        int deathCount = livingCount - targetSize;
+        float mortalityRate = (float)deathCount / Mathf.Max(1, livingCount);
         
         Debug.Log($"💀 应用死亡率: {fullFamily.Count}人 → {targetSize}人 (死亡率:{mortalityRate:P0})");
         
@@ -745,8 +748,11 @@ public class FamilyGenerator : MonoBehaviour
             character.vitalStatus = "deceased";
         }
         
-        // 返回存活成员
-        return fullFamily.Where(c => c.vitalStatus == "living").ToList();
+        // 返回所有成员(包括已故)
+        int finalLivingCount = fullFamily.Count(c => c.vitalStatus == "living");
+        Debug.Log($"✓ 最终: 存活{finalLivingCount}人, 已故{fullFamily.Count - finalLivingCount}人");
+        
+        return fullFamily; // 修改这里:返回全部,不过滤
     }
     
     /// <summary>
@@ -756,7 +762,9 @@ public class FamilyGenerator : MonoBehaviour
         List<CharacterRuntimeData> family,
         int deathCount)
     {
-        List<CharacterRuntimeData> candidates = new List<CharacterRuntimeData>(family);
+        List<CharacterRuntimeData> candidates = family
+            .Where(c => c != null && c.vitalStatus == "living")
+            .ToList();
         List<CharacterRuntimeData> deceased = new List<CharacterRuntimeData>();
         
         // 按死亡权重排序 (年龄越大权重越高)

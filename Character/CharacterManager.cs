@@ -1,5 +1,6 @@
-using UnityEngine;
 using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
 
 public class CharacterManager : MonoBehaviour
 {
@@ -15,13 +16,13 @@ public class CharacterManager : MonoBehaviour
     public GameObject femaleElderPrefab;
     public GameObject femaleKidPrefab;
     
-    [Header("其他配置")]
+    [Header("其它配置")]
     public Transform npcParent;
     
-    private Dictionary<string, CharacterRuntimeData> characters = new Dictionary<string, CharacterRuntimeData>();
-    private Dictionary<string, NPCController> npcControllers = new Dictionary<string, NPCController>();
+    private readonly Dictionary<string, CharacterRuntimeData> characters = new Dictionary<string, CharacterRuntimeData>();
+    private readonly Dictionary<string, NPCController> npcControllers = new Dictionary<string, NPCController>();
     
-    void Awake()
+    private void Awake()
     {
         Instance = this;
     }
@@ -32,22 +33,33 @@ public class CharacterManager : MonoBehaviour
         
         foreach (var character in characterList)
         {
-            AddCharacter(character);
+            bool shouldSpawn = character != null && character.vitalStatus == "living";
+            AddCharacter(character, shouldSpawn);
         }
         
-        Debug.Log($"✅ 人口初始化完成: {characters.Count}人");
+        int livingCount = characters.Values.Count(c => c.vitalStatus == "living");
+        Debug.Log($"✅ 人口初始化完成: 总数 {characters.Count} 人 在世 {livingCount} 人 已故 {characters.Count - livingCount} 人");
     }
     
-    public void AddCharacter(CharacterRuntimeData character)
+    public void AddCharacter(CharacterRuntimeData character, bool spawnNpc = true)
     {
+        if (character == null || string.IsNullOrEmpty(character.characterId))
+        {
+            return;
+        }
+        
         characters[character.characterId] = character;
         GameManager.Instance?.familySystem?.RegisterCharacter(character);
-        SpawnNPC(character);
+        
+        if (spawnNpc)
+        {
+            SpawnNPC(character);
+        }
     }
     
     public void RemoveCharacter(string characterId)
     {
-        if (!characters.ContainsKey(characterId))
+        if (string.IsNullOrEmpty(characterId) || !characters.ContainsKey(characterId))
         {
             return;
         }
@@ -64,12 +76,15 @@ public class CharacterManager : MonoBehaviour
     
     private void SpawnNPC(CharacterRuntimeData character)
     {
-        // 根据角色属性选择Prefab
-        GameObject prefabToUse = SelectPrefab(character);
+        if (character == null || character.vitalStatus != "living")
+        {
+            return;
+        }
         
+        GameObject prefabToUse = SelectPrefab(character);
         if (prefabToUse == null)
         {
-            Debug.LogError($"❌ 找不到适合的Prefab: {character.gender}, {character.age}岁");
+            Debug.LogError($"❌ 找不到合适的Prefab: {character.gender}, {character.age}岁");
             return;
         }
         
@@ -79,7 +94,6 @@ public class CharacterManager : MonoBehaviour
         GameObject npcObj = Instantiate(prefabToUse, spawnPos, Quaternion.identity, npcParent);
         npcObj.name = character.name;
         
-        // 确保有可选中的Collider
         if (npcObj.GetComponentInChildren<Collider>() == null)
         {
             var collider = npcObj.AddComponent<CapsuleCollider>();
@@ -88,7 +102,7 @@ public class CharacterManager : MonoBehaviour
             collider.radius = 0.4f;
         }
         
-        NPCController controller = npcObj.GetComponent<NPCController>();
+        var controller = npcObj.GetComponent<NPCController>();
         if (controller == null)
         {
             controller = npcObj.AddComponent<NPCController>();
@@ -100,56 +114,41 @@ public class CharacterManager : MonoBehaviour
     
     private GameObject SelectPrefab(CharacterRuntimeData character)
     {
-        // 根据年龄和性别选择Prefab
+        if (character == null)
+        {
+            return null;
+        }
+        
         bool isMale = character.gender == Gender.Male;
         int age = character.age;
         
         if (age < 16)
         {
-            // 儿童
             return isMale ? maleKidPrefab : femaleKidPrefab;
         }
-        else if (age < 25)
+        if (age < 25)
         {
-            // 青年
             return isMale ? maleYoungAdultPrefab : femaleYoungAdultPrefab;
         }
-        else if (age < 60)
+        if (age < 60)
         {
-            // 成年
             return isMale ? maleAdultPrefab : femaleAdultPrefab;
         }
-        else
-        {
-            // 老年
-            return isMale ? maleElderPrefab : femaleElderPrefab;
-        }
+        
+        return isMale ? maleElderPrefab : femaleElderPrefab;
     }
     
     private Vector3 GetRandomSpawnPosition()
     {
-        // 调整到您地形中确定平坦且有NavMesh的位置
-        Vector3 center = new Vector3(332, 205, 230); // 根据实际情况修改
-        
-        // 缩小生成范围
+        Vector3 center = new Vector3(332f, 205f, 230f);
         float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
-        float distance = Random.Range(0f, 3f); // 从5米改为3米，更集中
-        
-        Vector3 offset = new Vector3(
-            Mathf.Cos(angle) * distance,
-            0,
-            Mathf.Sin(angle) * distance
-        );
-        
+        float distance = Random.Range(0f, 3f);
+        Vector3 offset = new Vector3(Mathf.Cos(angle) * distance, 0f, Mathf.Sin(angle) * distance);
         Vector3 spawnPos = center + offset;
         
-        // 增加检测范围
-        RaycastHit hit;
-        if (Physics.Raycast(spawnPos + Vector3.up * 100f, Vector3.down, out hit, 150f))
+        if (Physics.Raycast(spawnPos + Vector3.up * 100f, Vector3.down, out var hit, 150f))
         {
-            // 检查是否在NavMesh上
-            UnityEngine.AI.NavMeshHit navHit;
-            if (UnityEngine.AI.NavMesh.SamplePosition(hit.point, out navHit, 5f, UnityEngine.AI.NavMesh.AllAreas))
+            if (UnityEngine.AI.NavMesh.SamplePosition(hit.point, out var navHit, 5f, UnityEngine.AI.NavMesh.AllAreas))
             {
                 return navHit.position + Vector3.up * 0.5f;
             }
@@ -160,11 +159,11 @@ public class CharacterManager : MonoBehaviour
     
     public CharacterRuntimeData GetCharacter(string id)
     {
-        return characters.ContainsKey(id) ? characters[id] : null;
+        return characters.TryGetValue(id, out var data) ? data : null;
     }
     
     public List<CharacterRuntimeData> GetAllCharacters()
     {
-        return new List<CharacterRuntimeData>(characters.Values);
+        return characters.Values.ToList();
     }
 }

@@ -125,6 +125,11 @@ public class FamilySystem : MonoBehaviour
             generationSpread = cache.GetGenerationSpread()
         };
     }
+
+    public List<CharacterRuntimeData> GetAllCharacters()
+    {
+        return new List<CharacterRuntimeData>(characters.Values);
+    }
     
     private void RebuildFamilyCaches()
     {

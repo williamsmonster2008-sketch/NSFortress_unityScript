@@ -27,6 +27,14 @@ public class CharacterInfoPanel : MonoBehaviour
     public void ShowCharacter(CharacterRuntimeData character, FamilySystem system)
     {
         familySystem = system;
+
+        // 调试:检查是否有已故角色
+        if (system != null)
+        {
+            var allChars = system.GetAllCharacters(); // 需要添加这个方法
+            var deceasedCount = allChars.Count(c => c.vitalStatus != "living");
+            Debug.Log($"总角色数: {allChars.Count}, 已故: {deceasedCount}");
+        }
         
         if (panelRoot != null)
         {
