@@ -27,7 +27,7 @@ public class NPCController : MonoBehaviour
         nameLabel = GetComponentInChildren<TextMesh>();
         if (nameLabel != null)
         {
-            nameLabel.text = $"{data.name}\n{data.age}岁";
+            nameLabel.text = string.Empty;
         }
         
         // 根据年龄调整速度

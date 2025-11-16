@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 
 public class CharacterGenerator : MonoBehaviour
@@ -60,8 +60,8 @@ public class CharacterGenerator : MonoBehaviour
 
         Debug.Log($"🎲 生成家族 - 姓氏: {familyName}, 阶层: {familySocialClass}");
         // 传递社会阶层
-        var father = GenerateCharacterFromTemplate("adult_male_farmer", familyName, familySocialClass, 1);
-        var mother = GenerateCharacterFromTemplate("adult_female_farmer", familyName, familySocialClass, 1);
+        var father = GenerateCharacterFromTemplate("adult_male_farmer", familyName, familySocialClass, 1, Gender.Male);
+        var mother = GenerateCharacterFromTemplate("adult_female_farmer", familyName, familySocialClass, 1, Gender.Female);
         
         // 设置夫妻关系
         father.spouseId = mother.characterId;
@@ -71,12 +71,17 @@ public class CharacterGenerator : MonoBehaviour
         family.Add(mother);
         
         // 生成子女
-        int childCount = targetSize - 2;
+        int childCount = Mathf.Max(0, targetSize - 2);
         for (int i = 0; i < childCount; i++)
         {
             // 70%概率是儿童，30%是老人
             string templateId = random.NextDouble() < 0.7 ? "child" : "elder";
-            var child = GenerateCharacterFromTemplate(templateId, familyName, familySocialClass, 2);
+            var child = GenerateCharacterFromTemplate(templateId, familyName, familySocialClass, templateId == "child" ? 2 : 1, null);
+            
+            if (child == null)
+            {
+                continue;
+            }
             
             // 如果是儿童，建立父母关系
             if (templateId == "child" || child.age < 18)
@@ -102,7 +107,7 @@ public class CharacterGenerator : MonoBehaviour
         return family;
     }
     
-    private CharacterRuntimeData GenerateCharacterFromTemplate(string templateId, string familyName, string socialClass, int generation)
+    private CharacterRuntimeData GenerateCharacterFromTemplate(string templateId, string familyName, string socialClass, int generation, Gender? forcedGender)
     {
         var template = templates.templates.Find(t => t.id == templateId);
         if (template == null)
@@ -117,9 +122,7 @@ public class CharacterGenerator : MonoBehaviour
             characterId = System.Guid.NewGuid().ToString(),
             familyName = familyName,
             age = random.Next(template.ageRange[0], template.ageRange[1] + 1),
-            gender = template.gender == "随机" ? 
-                (random.Next(2) == 0 ? Gender.男 : Gender.女) : 
-                (template.gender == "男" ? Gender.男 : Gender.女),
+            gender = DetermineGender(template.gender, forcedGender),
             generation = generation
         };
         
@@ -139,13 +142,6 @@ public class CharacterGenerator : MonoBehaviour
         character.emotional = new EmotionalState
         {
             happiness = random.Next(30, 70)
-        };
-        
-        character.virtues = new VirtueTraits
-        {
-            loving_tendency = random.Next(-50, 50),
-            altruism_tendency = random.Next(-50, 50),
-            social_tendency = random.Next(-50, 50)
         };
         
         // 生成技能
@@ -183,5 +179,28 @@ public class CharacterGenerator : MonoBehaviour
         string surname = nameDatabase.GetRandomFamilyName(socialClass, random);
         Debug.Log($"🎲 CharacterGenerator获得姓氏: {surname} (阶层: {socialClass})");
         return surname;
+    }
+
+    private Gender DetermineGender(string templateGender, Gender? forced)
+    {
+        if (forced.HasValue)
+        {
+            return forced.Value;
+        }
+
+        string token = templateGender ?? string.Empty;
+        token = token.Trim().ToLowerInvariant();
+
+        if (string.IsNullOrEmpty(token) || token == "随机" || token == "random")
+        {
+            return random.Next(2) == 0 ? Gender.Male : Gender.Female;
+        }
+
+        if (token == "男" || token == "male")
+        {
+            return Gender.Male;
+        }
+
+        return Gender.Female;
     }
 }

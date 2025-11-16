@@ -1,148 +1,156 @@
 using UnityEngine;
 
+/// <summary>
+/// 自由摄像机控制：WASD 平移、右键旋转、左键拖拽、滚轮缩放
+/// </summary>
 public class CameraController : MonoBehaviour
 {
-    [Header("跟随设置")]
-    public Vector3 offset = new Vector3(0, 5, -10);
-    public float followSpeed = 3f;
+    [Header("初始定位")]
+    public Vector3 initialPosition = new Vector3(332f, 210f, 225f);
+    public Vector2 initialRotation = new Vector2(45f, 0f);
     
-    [Header("镜头控制")]
-    public float mouseSensitivity = 3f;
-    public float scrollSpeed = 5f;
-    public float minDistance = 3f;
-    public float maxDistance = 30f;
+    [Header("移动")]
+    public float moveSpeed = 10f;
+    public float fastMoveMultiplier = 2f;
     
-    [Header("按键")]
-    public KeyCode nextNPCKey = KeyCode.N;
-    public KeyCode prevNPCKey = KeyCode.B;
-    public KeyCode freeLookKey = KeyCode.Mouse1; // 右键
+    [Header("旋转/拖拽")]
+    public float rotationSensitivity = 3f;
+    public float dragSpeed = 0.5f;
     
-    private Transform currentTarget;
-    private int currentNPCIndex = 0;
-    private Transform[] allNPCs;
+    [Header("缩放")]
+    public float scrollSpeed = 50f;
+    [Tooltip("距地面的最近高度")]
+    public float minZoomHeight = 2.5f;
+    [Tooltip("距地面的最远高度")]
+    public float maxZoomHeight = 50f;
+    [Tooltip("键盘缩放速度")]
+    public float keyboardZoomSpeed = 20f;
+    public KeyCode zoomInKey = KeyCode.Equals;
+    public KeyCode zoomOutKey = KeyCode.Minus;
+    public LayerMask groundLayers = ~0;
     
-    private float currentDistance = 10f;
-    private float currentRotationX = 0f;
-    private float currentRotationY = 30f;
+    private Vector3 forwardPlane;
+    private Vector3 rightPlane;
+    private float rotationX;
+    private float rotationY;
     
-    void Start()
+    private float lastGroundHeight;
+    
+    private void Start()
     {
-        currentDistance = offset.magnitude;
-        Invoke("FindAllNPCs", 3f);
+        transform.position = initialPosition;
+        rotationX = initialRotation.y;
+        rotationY = initialRotation.x;
+        lastGroundHeight = initialPosition.y - minZoomHeight;
+        ApplyRotation();
+        ClampHeight();
     }
     
-    void FindAllNPCs()
+    private void Update()
     {
-        GameObject npcsParent = GameObject.Find("NPCs");
-        if (npcsParent != null && npcsParent.transform.childCount > 0)
+        HandleRotation();
+        HandleMovement();
+        HandleDrag();
+        HandleZoom();
+    }
+    
+    private void HandleRotation()
+    {
+        if (Input.GetMouseButton(1))
         {
-            System.Collections.Generic.List<Transform> npcList = new System.Collections.Generic.List<Transform>();
-            
-            foreach (Transform child in npcsParent.transform)
+            rotationX += Input.GetAxis("Mouse X") * rotationSensitivity;
+            rotationY -= Input.GetAxis("Mouse Y") * rotationSensitivity;
+            rotationY = Mathf.Clamp(rotationY, 10f, 85f);
+            ApplyRotation();
+        }
+    }
+    
+    private void ApplyRotation()
+    {
+        transform.rotation = Quaternion.Euler(rotationY, rotationX, 0f);
+        forwardPlane = transform.forward;
+        forwardPlane.y = 0;
+        forwardPlane.Normalize();
+        rightPlane = transform.right;
+        rightPlane.y = 0;
+        rightPlane.Normalize();
+    }
+    
+    private void HandleMovement()
+    {
+        float horizontal = Input.GetAxis("Horizontal");
+        float vertical = Input.GetAxis("Vertical");
+        
+        if (Mathf.Abs(horizontal) > 0.01f || Mathf.Abs(vertical) > 0.01f)
+        {
+            float speed = moveSpeed * Time.deltaTime;
+            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
             {
-                if (child != null && child.gameObject.activeSelf)
-                {
-                    npcList.Add(child);
-                }
+                speed *= fastMoveMultiplier;
             }
             
-            allNPCs = npcList.ToArray();
-            
-            if (allNPCs.Length > 0)
-            {
-                SwitchToNPC(0);
-            }
-            
-            Debug.Log($"📷 找到 {allNPCs.Length} 个NPC");
+            Vector3 move = rightPlane * horizontal + forwardPlane * vertical;
+            transform.position += move * speed;
+            ClampHeight();
         }
     }
     
-    void Update()
+    private void HandleDrag()
     {
-        // 切换NPC
-        if (Input.GetKeyDown(nextNPCKey))
+        if (Input.GetMouseButton(0))
         {
-            SwitchToNextNPC();
-        }
-        
-        if (Input.GetKeyDown(prevNPCKey))
-        {
-            SwitchToPreviousNPC();
-        }
-        
-        // 鼠标右键旋转视角
-        if (Input.GetKey(freeLookKey))
-        {
-            currentRotationX += Input.GetAxis("Mouse X") * mouseSensitivity;
-            currentRotationY -= Input.GetAxis("Mouse Y") * mouseSensitivity;
-            currentRotationY = Mathf.Clamp(currentRotationY, 5f, 85f);
-        }
-        
-        // 鼠标滚轮缩放
-        float scroll = Input.GetAxis("Mouse ScrollWheel");
-        currentDistance -= scroll * scrollSpeed;
-        currentDistance = Mathf.Clamp(currentDistance, minDistance, maxDistance);
-    }
-    
-    void LateUpdate()
-    {
-        if (currentTarget != null)
-        {
-            // 计算旋转
-            Quaternion rotation = Quaternion.Euler(currentRotationY, currentRotationX, 0);
-            
-            // 计算位置
-            Vector3 direction = rotation * Vector3.back;
-            Vector3 desiredPosition = currentTarget.position + Vector3.up * 2f + direction * currentDistance;
-            
-            // 平滑移动
-            transform.position = Vector3.Lerp(
-                transform.position, 
-                desiredPosition, 
-                Time.deltaTime * followSpeed
-            );
-            
-            // 看向目标
-            transform.LookAt(currentTarget.position + Vector3.up * 2f);
+            float dragX = -Input.GetAxis("Mouse X") * dragSpeed;
+            float dragY = -Input.GetAxis("Mouse Y") * dragSpeed;
+            Vector3 drag = rightPlane * dragX + forwardPlane * dragY;
+            transform.position += drag;
+            ClampHeight();
         }
     }
     
-    void SwitchToNextNPC()
+    private void HandleZoom()
     {
-        if (allNPCs == null || allNPCs.Length == 0) return;
+        float delta = Input.GetAxis("Mouse ScrollWheel") * scrollSpeed;
         
-        currentNPCIndex = (currentNPCIndex + 1) % allNPCs.Length;
-        SwitchToNPC(currentNPCIndex);
-    }
-    
-    void SwitchToPreviousNPC()
-    {
-        if (allNPCs == null || allNPCs.Length == 0) return;
-        
-        currentNPCIndex--;
-        if (currentNPCIndex < 0) currentNPCIndex = allNPCs.Length - 1;
-        SwitchToNPC(currentNPCIndex);
-    }
-    
-    void SwitchToNPC(int index)
-    {
-        if (allNPCs == null || index < 0 || index >= allNPCs.Length) return;
-        
-        if (allNPCs[index] == null || !allNPCs[index].gameObject.activeSelf)
+        if (Input.GetKey(zoomInKey))
         {
-            Debug.LogWarning($"⚠️ NPC {index} 无效，跳过");
-            SwitchToNextNPC();
+            delta += keyboardZoomSpeed;
+        }
+        if (Input.GetKey(zoomOutKey))
+        {
+            delta -= keyboardZoomSpeed;
+        }
+        
+        if (Mathf.Abs(delta) <= 0.001f)
+        {
             return;
         }
         
-        currentTarget = allNPCs[index];
-        currentNPCIndex = index;
-        
-        NPCController npc = currentTarget.GetComponent<NPCController>();
-        string npcName = npc != null && npc.characterData != null ? 
-            $"{npc.characterData.familyName}{npc.characterData.name}" : 
-            currentTarget.name;
-        
-        Debug.Log($"📷 {index + 1}/{allNPCs.Length}: {npcName}");
+        Vector3 target = transform.position + transform.forward * delta * Time.deltaTime;
+        AdjustHeight(ref target);
+        transform.position = target;
+    }
+    
+    private void ClampHeight()
+    {
+        var pos = transform.position;
+        AdjustHeight(ref pos);
+        transform.position = pos;
+    }
+    
+    private void AdjustHeight(ref Vector3 position)
+    {
+        float ground = SampleGroundHeight(position);
+        float height = Mathf.Clamp(position.y - ground, minZoomHeight, maxZoomHeight);
+        position.y = ground + height;
+    }
+    
+    private float SampleGroundHeight(Vector3 position)
+    {
+        RaycastHit hit;
+        if (Physics.Raycast(position + Vector3.up * 200f, Vector3.down, out hit, 500f, groundLayers, QueryTriggerInteraction.Ignore))
+        {
+            lastGroundHeight = hit.point.y;
+        }
+        return lastGroundHeight;
     }
 }

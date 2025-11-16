@@ -103,7 +103,7 @@ public class PathFinder
                 character.characterId,
                 character.fatherId,
                 RelationType.父子,
-                Gender.男,
+                Gender.Male,
                 false
             ));
         }
@@ -115,7 +115,7 @@ public class PathFinder
                 character.characterId,
                 character.motherId,
                 RelationType.母子,
-                Gender.女,
+                Gender.Female,
                 false
             ));
         }
@@ -142,7 +142,7 @@ public class PathFinder
                 neighbors.Add(new PathStep(
                     character.characterId,
                     childId,
-                    character.gender == Gender.男 ? RelationType.父子 : RelationType.母子,
+                    character.gender == Gender.Male ? RelationType.父子 : RelationType.母子,
                     child.gender,
                     false
                 ));

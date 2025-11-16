@@ -31,7 +31,7 @@ public class CharacterRuntimeData
     public EmotionalState emotional;
     
     [FoldoutGroup("人格")]
-    public VirtueTraits virtues;
+    public VirtueTraits virtues = new VirtueTraits();
     
     [FoldoutGroup("技能")]
     // 改用普通List，更简单
@@ -51,4 +51,4 @@ public class CharacterSkill
     public int skillLevel;
 }
 
-public enum Gender { 男, 女 }
+public enum Gender { Male, Female }

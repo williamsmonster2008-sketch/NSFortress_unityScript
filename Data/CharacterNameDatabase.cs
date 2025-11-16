@@ -205,7 +205,7 @@ public class CharacterNameDatabase : ScriptableObject
         
         if (givenName == generationChar)
         {
-            givenName = gender == Gender.男 ? "之" : "华";
+            givenName = gender == Gender.Male ? "之" : "华";
         }
         
         // 组合：姓 + 辈分字 + 名
@@ -293,7 +293,7 @@ public class CharacterNameDatabase : ScriptableObject
     {
         if (!initialized) Initialize();
         
-        string genderKey = gender == Gender.男 ? "男" : "女";
+        string genderKey = gender == Gender.Male ? "男" : "女";
         Debug.Log($"🔍 GetRandomGivenName - socialClass: '{socialClass}', gender: {genderKey}, 是否包含key: {namesByClassAndGender.ContainsKey(socialClass)}");
         
         if (namesByClassAndGender.ContainsKey(socialClass))
@@ -315,7 +315,7 @@ public class CharacterNameDatabase : ScriptableObject
         
         Debug.LogWarning($"⚠️ 未找到名字，使用默认");
         
-        return gender == Gender.男 ? "明" : "华";
+        return gender == Gender.Male ? "明" : "华";
     }
     
     public string GetRandomFamilyName(string socialClass, System.Random rand)

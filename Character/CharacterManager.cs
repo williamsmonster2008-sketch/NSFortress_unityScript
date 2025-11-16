@@ -41,7 +41,25 @@ public class CharacterManager : MonoBehaviour
     public void AddCharacter(CharacterRuntimeData character)
     {
         characters[character.characterId] = character;
+        GameManager.Instance?.familySystem?.RegisterCharacter(character);
         SpawnNPC(character);
+    }
+    
+    public void RemoveCharacter(string characterId)
+    {
+        if (!characters.ContainsKey(characterId))
+        {
+            return;
+        }
+        
+        characters.Remove(characterId);
+        if (npcControllers.TryGetValue(characterId, out var controller) && controller != null)
+        {
+            Destroy(controller.gameObject);
+            npcControllers.Remove(characterId);
+        }
+        
+        GameManager.Instance?.familySystem?.RemoveCharacter(characterId);
     }
     
     private void SpawnNPC(CharacterRuntimeData character)
@@ -61,6 +79,15 @@ public class CharacterManager : MonoBehaviour
         GameObject npcObj = Instantiate(prefabToUse, spawnPos, Quaternion.identity, npcParent);
         npcObj.name = character.name;
         
+        // 确保有可选中的Collider
+        if (npcObj.GetComponentInChildren<Collider>() == null)
+        {
+            var collider = npcObj.AddComponent<CapsuleCollider>();
+            collider.center = new Vector3(0f, 1f, 0f);
+            collider.height = 2f;
+            collider.radius = 0.4f;
+        }
+        
         NPCController controller = npcObj.GetComponent<NPCController>();
         if (controller == null)
         {
@@ -74,7 +101,7 @@ public class CharacterManager : MonoBehaviour
     private GameObject SelectPrefab(CharacterRuntimeData character)
     {
         // 根据年龄和性别选择Prefab
-        bool isMale = character.gender == Gender.男;
+        bool isMale = character.gender == Gender.Male;
         int age = character.age;
         
         if (age < 16)

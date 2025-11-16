@@ -40,6 +40,11 @@ public class FertilityConfig : ScriptableObject
     
     [Tooltip("平均子女数")]
     public float averageChildren = 3f;
+
+    [Header("特殊场景")]
+    [Tooltip("逃难模式下的生育率系数（乘算于第4代及以后）")]
+    [Range(0f, 1f)]
+    public float refugeeFertilityRate = 0.35f;
     
     [Header("生育率曲线")]
     [Tooltip("按母亲年龄的生育概率曲线")]
@@ -66,23 +71,23 @@ public class FertilityConfig : ScriptableObject
     [Header("各代存活率")]
     [Tooltip("第1代(高祖)存活率")]
     [Range(0f, 1f)]
-    public float generation1SurvivalRate = 0.3f;
+    public float generation1SurvivalRate = 0.01f;
     
     [Tooltip("第2代(曾祖)存活率")]
     [Range(0f, 1f)]
-    public float generation2SurvivalRate = 0.5f;
+    public float generation2SurvivalRate = 0.25f;
     
     [Tooltip("第3代(祖父母)存活率")]
     [Range(0f, 1f)]
-    public float generation3SurvivalRate = 0.7f;
+    public float generation3SurvivalRate = 0.55f;
     
     [Tooltip("第4代(父母)存活率")]
     [Range(0f, 1f)]
-    public float generation4SurvivalRate = 0.9f;
+    public float generation4SurvivalRate = 0.85f;
     
     [Tooltip("第5代(子女)存活率")]
     [Range(0f, 1f)]
-    public float generation5SurvivalRate = 0.95f;
+    public float generation5SurvivalRate = 0.05f;
     
     /// <summary>
     /// 获取某代的存活率

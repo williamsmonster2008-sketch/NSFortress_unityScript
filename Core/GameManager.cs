@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System.Linq;
 
 public class GameManager : MonoBehaviour
 {
@@ -23,6 +24,12 @@ public class GameManager : MonoBehaviour
 
     [Header("家族系统")]
     public FamilyManager familyManager;
+    [Header("关系系统")]
+    public FamilySystem familySystem;
+    public RelationshipService relationshipService;
+    
+    [Header("德行系统")]
+    public VirtueSystem virtueSystem;
     
     
     private List<CharacterRuntimeData> allCharacters = new List<CharacterRuntimeData>();
@@ -93,6 +100,39 @@ public class GameManager : MonoBehaviour
             allCharacters = familyGenerator.GenerateRefugeeGroup(initialFamilyCount, avgFamilySize);
             
             Debug.Log($"📋 生成了 {allCharacters.Count} 个角色数据");
+            var livingCharacters = allCharacters.Where(c => c.vitalStatus == "living").ToList();
+            FamilyGenerator.LogAgeDistribution(livingCharacters, "总人口");
+            
+            if (familySystem != null)
+            {
+                familySystem.Initialize(allCharacters);
+            }
+            
+            if (relationshipService != null)
+            {
+                relationshipService.Initialize(familySystem);
+            }
+            
+            if (virtueSystem != null)
+            {
+                virtueSystem.Initialize(allCharacters);
+                
+                if (allCharacters.Count > 0)
+                {
+                    var sampleId = allCharacters[0].characterId;
+                    var profile = virtueSystem.GetProfile(sampleId);
+                    if (profile != null)
+                    {
+                        int count = 0;
+                        foreach (var trait in profile.EnumerateTraits())
+                        {
+                            Debug.Log($"{allCharacters[0].name} 德行 {trait.definition.name}: {trait.value:F1}");
+                            count++;
+                            if (count >= 3) break;
+                        }
+                    }
+                }
+            }
         }
         else
         {

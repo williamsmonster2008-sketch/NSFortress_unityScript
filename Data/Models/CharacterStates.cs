@@ -1,5 +1,6 @@
 using System;
-using UnityEngine; // 添加这行
+using System.Collections.Generic;
+using UnityEngine;
 using Sirenix.OdinInspector;
 
 [Serializable]
@@ -26,7 +27,31 @@ public class EmotionalState
 [Serializable]
 public class VirtueTraits
 {
-    [BoxGroup("仁")] public int loving_tendency = 0;
-    [BoxGroup("义")] public int altruism_tendency = 0;
-    [BoxGroup("礼")] public int social_tendency = 0;
+    public List<VirtueTraitValue> traits = new List<VirtueTraitValue>();
+    
+    public float? GetValue(string traitId)
+    {
+        var entry = traits.Find(t => t.id == traitId);
+        return entry != null ? entry.value : (float?)null;
+    }
+    
+    public void SetValue(string traitId, float value)
+    {
+        var entry = traits.Find(t => t.id == traitId);
+        if (entry != null)
+        {
+            entry.value = value;
+        }
+        else
+        {
+            traits.Add(new VirtueTraitValue { id = traitId, value = value });
+        }
+    }
+}
+
+[Serializable]
+public class VirtueTraitValue
+{
+    public string id;
+    public float value;
 }

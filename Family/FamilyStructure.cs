@@ -68,7 +68,7 @@ public class FamilyStructure
     public List<string> GetSonsOfGeneration(int generation)
     {
         return members.Values
-            .Where(m => m.generation == generation && m.gender == Gender.男 && m.isNative)
+            .Where(m => m.generation == generation && m.gender == Gender.Male && m.isNative)
             .Select(m => m.tempId)
             .ToList();
     }

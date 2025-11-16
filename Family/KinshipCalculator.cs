@@ -77,7 +77,7 @@ public class KinshipCalculator : MonoBehaviour
         int pathLength = relation.pathLength;
         int gap = relation.generationGap;
         bool isOlder = relation.generationDelta > 0; // 对方是否是长辈
-        bool isMale = to.gender == Gender.男;
+        bool isMale = to.gender == Gender.Male;
         
         // 根据pathLength和gap查表
         string baseTitle = GetPaternalBaseTitle(pathLength, gap, isOlder, isMale);
@@ -247,7 +247,7 @@ public class KinshipCalculator : MonoBehaviour
         int pathLength = relation.pathLength;
         int gap = relation.generationGap;
         bool isOlder = relation.generationDelta > 0;
-        bool isMale = to.gender == Gender.男;
+        bool isMale = to.gender == Gender.Male;
         
         // 简化实现：外字前缀
         string baseTitle = GetPaternalBaseTitle(pathLength, gap, isOlder, isMale);

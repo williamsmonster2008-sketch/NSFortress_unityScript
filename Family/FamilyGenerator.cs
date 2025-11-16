@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -18,6 +18,12 @@ public class FamilyGenerator : MonoBehaviour
     public void Initialize(int seed)
     {
         random = new System.Random(seed);
+        
+        if (nameDatabase != null)
+        {
+            nameDatabase.Initialize();
+        }
+        
         Debug.Log($"🏭 家族生成器初始化 (种子: {seed})");
     }
     
@@ -50,7 +56,7 @@ public class FamilyGenerator : MonoBehaviour
     /// <summary>
     /// 生成完整的5代家族
     /// </summary>
-    public List<CharacterRuntimeData> GenerateCompleteFamily(string familyName, int targetSize, string socialClass)
+    public List<CharacterRuntimeData> GenerateCompleteFamily(string familyName, string socialClass, int targetSize)
     {
         // 阶段1: 生成年龄结构和关系网络
         FiveGenerationAgeStructure ageStructure = GenerateFiveGenerationStructure(familyName, targetSize);
@@ -60,11 +66,19 @@ public class FamilyGenerator : MonoBehaviour
         // 阶段2: 创建角色实例
         List<CharacterRuntimeData> members = CreateMembersFromAgeStructure(familyName, socialClass, ageStructure);
         
+        // 阶段2.5: 根据代际存活率筛选
+        members = ApplyGenerationSurvival(members);
+        
         // 阶段3: 应用死亡率筛选
-        if (ageStructure.GetTotalCount() > targetSize)
+        if (members.Count > targetSize)
         {
             members = ApplyMortalityAndResize(members, targetSize);
         }
+        
+        // 阶段3.5: 控制青少年占比
+        members = ApplyYouthRatioLimit(members, 0.10f);
+        
+        LogAgeDistribution(members, $"{familyName}");
         
         return members;
     }
@@ -125,8 +139,8 @@ public class FamilyGenerator : MonoBehaviour
         string gen1Father = idManager.AllocateId("patriarch_gen1");
         string gen1Mother = idManager.AllocateId("matriarch_gen1");
         
-        structure.AddMember(new MemberAgeData(gen1Father, gen1FatherAge, Gender.男, 1, true));
-        structure.AddMember(new MemberAgeData(gen1Mother, gen1MotherAge, Gender.女, 1, false));
+        structure.AddMember(new MemberAgeData(gen1Father, gen1FatherAge, Gender.Male, 1, true));
+        structure.AddMember(new MemberAgeData(gen1Mother, gen1MotherAge, Gender.Female, 1, false));
         structure.AddMarriage(gen1Father, gen1Mother, 1);
         
         // === 第2代: 曾祖辈 (可能有多个儿子) ===
@@ -139,7 +153,7 @@ public class FamilyGenerator : MonoBehaviour
             string gen2Son = idManager.AllocateId($"son_gen2_{i}");
             int sonAge = CalculateChildAge(gen1MotherAge, gen1FatherAge, i);
             
-            var sonData = new MemberAgeData(gen2Son, sonAge, Gender.男, 2, true);
+            var sonData = new MemberAgeData(gen2Son, sonAge, Gender.Male, 2, true);
             sonData.birthOrder = i;
             structure.AddMember(sonData);
             structure.AddParentChild(gen1Father, gen1Mother, gen2Son, i);
@@ -151,7 +165,7 @@ public class FamilyGenerator : MonoBehaviour
                 string gen2Wife = idManager.AllocateId($"wife_gen2_{i}");
                 int wifeAge = CalculateSpouseAge(sonAge, fertilityConfig.minBreedingAge);
                 
-                structure.AddMember(new MemberAgeData(gen2Wife, wifeAge, Gender.女, 2, false));
+                structure.AddMember(new MemberAgeData(gen2Wife, wifeAge, Gender.Female, 2, false));
                 structure.AddMarriage(gen2Son, gen2Wife, 2);
             }
         }
@@ -213,18 +227,32 @@ public class FamilyGenerator : MonoBehaviour
         
         // 计算子女数量
         int childCount = CalculateChildrenCount(mother.age);
+        
+        if (childGeneration >= 4)
+        {
+            float modifier = Mathf.Clamp01(fertilityConfig.refugeeFertilityRate);
+            float scaled = childCount * modifier;
+            int adjusted = Mathf.FloorToInt(scaled);
+            float fractional = scaled - adjusted;
+            if (random.NextDouble() < fractional)
+            {
+                adjusted++;
+            }
+            childCount = Mathf.Max(0, adjusted);
+        }
         if (childCount == 0) return;
         
+        List<int> childAges = GenerateChildAgeSequence(mother.age, father.age, childCount);
         List<string> siblingIds = new List<string>();
         
         for (int i = 0; i < childCount; i++)
         {
             // 随机性别
-            Gender childGender = random.Next(2) == 0 ? Gender.男 : Gender.女;
+            Gender childGender = random.Next(2) == 0 ? Gender.Male : Gender.Female;
             string childId = idManager.AllocateId($"child_gen{childGeneration}_{marriage.husband}_{i}");
             
             // 计算子女年龄
-            int childAge = CalculateChildAge(mother.age, father.age, i);
+            int childAge = childAges.Count > i ? childAges[i] : 1;
             
             var childData = new MemberAgeData(childId, childAge, childGender, childGeneration, true);
             childData.birthOrder = i;
@@ -233,12 +261,12 @@ public class FamilyGenerator : MonoBehaviour
             siblingIds.Add(childId);
             
             // 如果是儿子且到婚龄,生成配偶
-            if (childGender == Gender.男 && childAge >= fertilityConfig.minBreedingAge && childGeneration < 5)
+            if (childGender == Gender.Male && childAge >= fertilityConfig.minBreedingAge && childGeneration < 5)
             {
                 string wifeId = idManager.AllocateId($"wife_{childId}");
                 int wifeAge = CalculateSpouseAge(childAge, fertilityConfig.minBreedingAge);
                 
-                structure.AddMember(new MemberAgeData(wifeId, wifeAge, Gender.女, childGeneration, false));
+                structure.AddMember(new MemberAgeData(wifeId, wifeAge, Gender.Female, childGeneration, false));
                 structure.AddMarriage(childId, wifeId, childGeneration);
             }
         }
@@ -283,17 +311,116 @@ public class FamilyGenerator : MonoBehaviour
         }
         
         // 基于生育窗口计算最大可能子女数
-        int maxPossibleChildren = Mathf.Max(1, fertilitySpan / 2); // 至少2年一个孩子
+        int maxPossibleChildren = Mathf.Max(0, fertilitySpan / 2); // 至少2年一个孩子
+        if (maxPossibleChildren == 0)
+        {
+            return 0;
+        }
         
-        // 基础子女数
-        int baseCount = random.Next(fertilityConfig.minChildren, fertilityConfig.maxChildren + 1);
+        int slotCount = Mathf.Max(1, maxPossibleChildren * 2);
+        float slotSize = fertilitySpan / (float)slotCount;
+        float[] slotWeights = new float[slotCount];
+        float totalWeight = 0f;
         
-        // 限制在生育窗口允许的范围内
-        int finalCount = Mathf.Min(baseCount, maxPossibleChildren);
+        for (int i = 0; i < slotCount; i++)
+        {
+            float sampleAge = earliestBirth + (i + 0.5f) * slotSize;
+            float weight = Mathf.Max(0f, fertilityConfig.fertilityByAge.Evaluate(sampleAge));
+            slotWeights[i] = weight;
+            totalWeight += weight;
+        }
+        
+        if (totalWeight <= Mathf.Epsilon)
+        {
+            return 0;
+        }
+        
+        float normalizedSpan = fertilitySpan / Mathf.Max(1f, fertilityConfig.maxBreedingAge - fertilityConfig.minBreedingAge);
+        float desiredChildren = Mathf.Clamp(fertilityConfig.averageChildren * normalizedSpan, 0f, fertilityConfig.maxChildren);
+        float probabilityScale = desiredChildren / totalWeight;
+        
+        int childrenCount = 0;
+        for (int i = 0; i < slotCount; i++)
+        {
+            float probability = Mathf.Clamp01(slotWeights[i] * probabilityScale);
+            if (random.NextDouble() < probability)
+            {
+                childrenCount++;
+                if (childrenCount >= maxPossibleChildren)
+                {
+                    break;
+                }
+            }
+        }
+        
+        int finalCount = Mathf.Clamp(childrenCount, 0, Mathf.Min(fertilityConfig.maxChildren, maxPossibleChildren));
         
         Debug.Log($"🔍 母亲{motherAge}岁,生育窗口={fertilitySpan}年,计算子女数={finalCount}");
         
-        return Mathf.Max(1, finalCount);
+        return finalCount;
+    }
+
+    /// <summary>
+    /// 生成子女年龄分布序列
+    /// </summary>
+    private List<int> GenerateChildAgeSequence(int motherAge, int fatherAge, int childCount)
+    {
+        List<int> ages = new List<int>();
+        if (childCount <= 0)
+        {
+            return ages;
+        }
+        
+        int earliestBirth = fertilityConfig.minBreedingAge;
+        int latestBirth = Mathf.Min(motherAge, fertilityConfig.maxBreedingAge);
+        if (latestBirth <= earliestBirth)
+        {
+            for (int i = 0; i < childCount; i++)
+            {
+                ages.Add(1);
+            }
+            return ages;
+        }
+        
+        float fertilitySpan = latestBirth - earliestBirth;
+        float firstBirthMin = earliestBirth + fertilitySpan * 0.1f;
+        float firstBirthMax = earliestBirth + fertilitySpan * 0.35f;
+        float currentBirthAge = Mathf.Clamp(
+            firstBirthMin + (float)random.NextDouble() * (firstBirthMax - firstBirthMin),
+            earliestBirth,
+            latestBirth);
+        
+        int parentGap = Mathf.Max(10, fertilityConfig.minGenerationGap);
+        
+        for (int i = 0; i < childCount; i++)
+        {
+            if (i > 0)
+            {
+                int remainingChildren = childCount - i;
+                float remainingSpan = Mathf.Max(1f, latestBirth - currentBirthAge);
+                float avgGap = Mathf.Max(1.5f, remainingSpan / (remainingChildren + 1));
+                float gapVariance = avgGap * 0.35f;
+                float randomOffset = (float)(random.NextDouble() * 2 - 1) * gapVariance;
+                float gap = Mathf.Max(1f, avgGap + randomOffset);
+                currentBirthAge = Mathf.Min(latestBirth, currentBirthAge + gap);
+            }
+            
+            int childAge = Mathf.Max(1, Mathf.RoundToInt(motherAge - currentBirthAge));
+            
+            int motherCap = Mathf.Max(1, motherAge - parentGap);
+            int fatherCap = Mathf.Max(1, fatherAge - parentGap);
+            childAge = Mathf.Min(childAge, motherCap);
+            childAge = Mathf.Min(childAge, fatherCap);
+            
+            if (ages.Count > 0 && childAge >= ages[ages.Count - 1])
+            {
+                childAge = Mathf.Max(1, ages[ages.Count - 1] - random.Next(1, 3));
+            }
+            
+            ages.Add(childAge);
+        }
+        
+        return ages;
     }
     
     /// <summary>
@@ -396,13 +523,6 @@ public class FamilyGenerator : MonoBehaviour
             },
             
             // 德行
-            virtues = new VirtueTraits
-            {
-                loving_tendency = random.Next(-50, 50),
-                altruism_tendency = random.Next(-50, 50),
-                social_tendency = random.Next(-50, 50)
-            },
-            
             skills = new List<CharacterSkill>(),
             childrenIds = new List<string>(),
             
@@ -479,6 +599,122 @@ public class FamilyGenerator : MonoBehaviour
                 }
             }
         }
+    }
+    
+    /// <summary>
+    /// 按代际存活率筛选
+    /// </summary>
+    private List<CharacterRuntimeData> ApplyGenerationSurvival(List<CharacterRuntimeData> members)
+    {
+        if (members == null || members.Count == 0)
+        {
+            return new List<CharacterRuntimeData>();
+        }
+        
+        List<CharacterRuntimeData> survivors = new List<CharacterRuntimeData>(members.Count);
+        Dictionary<int, int> deathsByGeneration = new Dictionary<int, int>();
+        
+        foreach (var character in members)
+        {
+            float survivalRate = Mathf.Clamp01(fertilityConfig.GetSurvivalRate(character.generation));
+            double roll = random != null ? random.NextDouble() : UnityEngine.Random.value;
+            
+            if (roll <= survivalRate)
+            {
+                character.vitalStatus = "living";
+                survivors.Add(character);
+            }
+            else
+            {
+                character.vitalStatus = "deceased";
+                if (deathsByGeneration.ContainsKey(character.generation))
+                {
+                    deathsByGeneration[character.generation]++;
+                }
+                else
+                {
+                    deathsByGeneration[character.generation] = 1;
+                }
+            }
+        }
+        
+        if (deathsByGeneration.Count > 0)
+        {
+            string summary = string.Join(", ", deathsByGeneration.Select(kvp => $"{kvp.Key}代淘汰{kvp.Value}人"));
+            Debug.Log($"[GenerationSurvival] {summary}");
+        }
+        
+        return survivors;
+    }
+    
+    /// <summary>
+    /// 控制青少年（5-14岁）占比
+    /// </summary>
+    private List<CharacterRuntimeData> ApplyYouthRatioLimit(List<CharacterRuntimeData> members, float maxRatio)
+    {
+        if (members == null || members.Count == 0)
+        {
+            return members ?? new List<CharacterRuntimeData>();
+        }
+        
+        var livingMembers = members.Where(c => c.vitalStatus == "living").ToList();
+        if (livingMembers.Count == 0)
+        {
+            return livingMembers;
+        }
+        
+        var youth = livingMembers.Where(c => c.age >= 5 && c.age <= 14).ToList();
+        int allowedYouth = Mathf.CeilToInt(livingMembers.Count * Mathf.Clamp01(maxRatio));
+        if (youth.Count <= allowedYouth)
+        {
+            return livingMembers;
+        }
+        
+        int excess = youth.Count - allowedYouth;
+        var selected = youth.OrderBy(_ => random.Next()).Take(excess).ToList();
+        foreach (var child in selected)
+        {
+            child.vitalStatus = "deceased";
+        }
+        
+        return members.Where(c => c.vitalStatus == "living").ToList();
+    }
+    
+    /// <summary>
+    /// 输出年龄段和代际分布
+    /// </summary>
+    public static void LogAgeDistribution(List<CharacterRuntimeData> members, string label)
+    {
+        if (members == null || members.Count == 0)
+        {
+            Debug.Log($"📊 {label} 年龄段统计: 无成员");
+            return;
+        }
+        
+        int total = members.Count;
+        int age55Plus = members.Count(c => c.age >= 55);
+        int age45To54 = members.Count(c => c.age >= 45 && c.age <= 54);
+        int age25To44 = members.Count(c => c.age >= 25 && c.age <= 44);
+        int age15To24 = members.Count(c => c.age >= 15 && c.age <= 24);
+        int age5To14 = members.Count(c => c.age >= 5 && c.age <= 14);
+        int ageUnder5 = members.Count(c => c.age < 5);
+        
+        string Format(int count) => $"{count}人({(count * 100f / total):F1}%)";
+        var generationCounts = members
+            .GroupBy(c => c.generation)
+            .OrderBy(g => g.Key)
+            .Select(g => $"第{g.Key}代 {Format(g.Count())}");
+        
+        Debug.Log(
+            $"📊 {label} 年龄段统计 (总数:{total}) | " +
+            $"55+: {Format(age55Plus)} | " +
+            $"45-54: {Format(age45To54)} | " +
+            $"25-44: {Format(age25To44)} | " +
+            $"15-24: {Format(age15To24)} | " +
+            $"5-14: {Format(age5To14)} | " +
+            $"<5: {Format(ageUnder5)}"
+        );
+        Debug.Log($"🔢 {label} 代际统计 | {string.Join(" | ", generationCounts)}");
     }
     
     // ==================== 阶段3: 死亡率筛选 ====================
