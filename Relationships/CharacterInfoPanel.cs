@@ -17,9 +17,14 @@ public class CharacterInfoPanel : MonoBehaviour
     public TextMeshProUGUI generationText;
     public TextMeshProUGUI fatherText;
     public TextMeshProUGUI motherText;
-    public TextMeshProUGUI siblingsText;
-    public TextMeshProUGUI childrenText;
     public TextMeshProUGUI topVirtuesText;
+    
+    [Header("动态亲属列表")]
+    public Transform siblingsContainer;
+    public Transform childrenContainer;
+    public GameObject relativeItemPrefab; // 需要一个包含3个TMP的预制：姓名/年龄/称谓
+    public TextMeshProUGUI siblingsEmptyText;
+    public TextMeshProUGUI childrenEmptyText;
     
     private FamilySystem familySystem;
     
@@ -27,24 +32,16 @@ public class CharacterInfoPanel : MonoBehaviour
     {
         familySystem = system;
         
-        if (system != null)
-        {
-            var allChars = system.GetAllCharacters();
-            var deceasedCount = allChars.Count(c => c.vitalStatus != "living");
-            Debug.Log($"角色总数: {allChars.Count}, 已故: {deceasedCount}");
-        }
-        
         if (panelRoot != null)
         {
             panelRoot.SetActive(character != null);
         }
-        
         if (character == null)
         {
             return;
         }
         
-        familyText?.SetText($"家族: {character.familyName}氏");
+        familyText?.SetText($"家族: {character.familyName}");
         nameText?.SetText($"{character.name}");
         ageText?.SetText($"{character.age}岁");
         genderText?.SetText($"{(character.gender == Gender.Male ? "男" : "女")}");
@@ -52,8 +49,9 @@ public class CharacterInfoPanel : MonoBehaviour
         
         fatherText?.SetText(BuildParentInfo("父亲", character.fatherId));
         motherText?.SetText(BuildParentInfo("母亲", character.motherId));
-        siblingsText?.SetText(BuildRelativeList("手足", CollectSiblings(character)));
-        childrenText?.SetText(BuildRelativeList("子女", CollectChildren(character)));
+        
+        RenderRelatives(siblingsContainer, siblingsEmptyText, CollectSiblings(character), isChildList: false);
+        RenderRelatives(childrenContainer, childrenEmptyText, CollectChildren(character), isChildList: true);
         
         var profile = GameManager.Instance.virtueSystem.GetProfile(character.characterId);
         if (profile != null)
@@ -71,6 +69,73 @@ public class CharacterInfoPanel : MonoBehaviour
         }
     }
     
+    private void RenderRelatives(Transform container, TextMeshProUGUI emptyText, List<CharacterRuntimeData> relatives, bool isChildList)
+    {
+        // 清空旧项
+        if (container != null)
+        {
+            foreach (Transform child in container)
+            {
+                Destroy(child.gameObject);
+            }
+        }
+        
+        bool hasData = relatives != null && relatives.Count > 0;
+        if (emptyText != null)
+        {
+            emptyText.gameObject.SetActive(!hasData);
+            if (!hasData)
+            {
+                emptyText.SetText(isChildList ? "子女：无" : "手足：无");
+            }
+        }
+        if (!hasData || container == null)
+        {
+            return;
+        }
+        
+        // 排序：按年龄降序
+        var sorted = relatives
+            .Where(r => r != null)
+            .OrderByDescending(r => r.age)
+            .ToList();
+        
+        for (int i = 0; i < sorted.Count; i++)
+        {
+            CreateRelativeItem(container, sorted[i], i, isChildList);
+        }
+    }
+    
+    private void CreateRelativeItem(Transform container, CharacterRuntimeData data, int index, bool isChildList)
+    {
+        if (relativeItemPrefab == null || container == null)
+        {
+            // 无预制体时，降级为文本拼接
+            string title = isChildList ? GetChildTitle(index, data.gender) : GetSiblingTitle(index, data.gender);
+            var line = $"{BuildBasicLine(data)} {title}";
+            var fallbackText = isChildList ? childrenEmptyText : siblingsEmptyText;
+            if (fallbackText != null)
+            {
+                // 追加行显示
+                string prefix = fallbackText.text ?? string.Empty;
+                fallbackText.SetText(string.IsNullOrEmpty(prefix) ? line : $"{prefix}\n{line}");
+                fallbackText.gameObject.SetActive(true);
+            }
+            return;
+        }
+        
+        var go = Instantiate(relativeItemPrefab, container);
+        var texts = go.GetComponentsInChildren<TextMeshProUGUI>();
+        if (texts != null && texts.Length >= 3)
+        {
+            texts[0].SetText(data.name);
+            bool living = data.vitalStatus == "living";
+            string ageInfo = living ? $"{data.age}岁" : $"殁年{data.age}岁";
+            texts[1].SetText(ageInfo);
+            texts[2].SetText(isChildList ? GetChildTitle(index, data.gender) : GetSiblingTitle(index, data.gender));
+        }
+    }
+    
     private string BuildParentInfo(string label, string parentId)
     {
         if (string.IsNullOrEmpty(parentId))
@@ -84,24 +149,14 @@ public class CharacterInfoPanel : MonoBehaviour
             return $"{label}: 不详";
         }
         
-        // 父母只显示姓名 + 存活状态 + 年龄
+        // 父母只显示姓名 + 年龄/殁年
         return $"{label}: {BuildBasicLine(parent)}";
     }
     
-    private string BuildRelativeList(string label, List<string> relatives)
-    {
-        if (relatives == null || relatives.Count == 0)
-        {
-            return $"{label}: 无";
-        }
-        
-        return $"{label}: {string.Join("、", relatives)}";
-    }
-    
-    private List<string> CollectSiblings(CharacterRuntimeData character)
+    private List<CharacterRuntimeData> CollectSiblings(CharacterRuntimeData character)
     {
         HashSet<string> ids = new HashSet<string>();
-        var result = new List<string>();
+        var result = new List<CharacterRuntimeData>();
         
         void AddFromParent(string parentId)
         {
@@ -126,7 +181,7 @@ public class CharacterInfoPanel : MonoBehaviour
                 var child = familySystem?.GetCharacter(childId);
                 if (child != null)
                 {
-                    result.Add(BuildIdentityLine(child));
+                    result.Add(child);
                 }
             }
         }
@@ -136,9 +191,9 @@ public class CharacterInfoPanel : MonoBehaviour
         return result;
     }
     
-    private List<string> CollectChildren(CharacterRuntimeData character)
+    private List<CharacterRuntimeData> CollectChildren(CharacterRuntimeData character)
     {
-        var list = new List<string>();
+        var list = new List<CharacterRuntimeData>();
         if (character.childrenIds == null || character.childrenIds.Count == 0)
         {
             return list;
@@ -149,7 +204,7 @@ public class CharacterInfoPanel : MonoBehaviour
             var child = familySystem?.GetCharacter(childId);
             if (child != null)
             {
-                list.Add(BuildIdentityLine(child));
+                list.Add(child);
             }
         }
         return list;
@@ -190,7 +245,7 @@ public class CharacterInfoPanel : MonoBehaviour
         {
             return "不详";
         }
-        bool living = data.vitalStatus == "living";       
+        bool living = data.vitalStatus == "living";
         string ageInfo = living ? $"{data.age}岁" : $"殁年{data.age}岁";
         return $"{data.name} {ageInfo}";
     }
@@ -213,6 +268,20 @@ public class CharacterInfoPanel : MonoBehaviour
         }
 
         return $"族辈: 第{data.generation}代";
+    }
+
+    private string GetSiblingTitle(int index, Gender gender)
+    {
+        string[] ranks = { "大", "二", "三", "四", "五", "六", "七", "八", "九" };
+        string rank = index < ranks.Length ? ranks[index] : $"{index + 1}";
+        return gender == Gender.Male ? $"{rank}哥" : $"{rank}姐";
+    }
+
+    private string GetChildTitle(int index, Gender gender)
+    {
+        string[] ranks = { "长", "次", "三", "四", "五", "六", "七", "八", "九" };
+        string rank = index < ranks.Length ? ranks[index] : $"{index + 1}";
+        return gender == Gender.Male ? $"{rank}子" : $"{rank}女";
     }
 }
 
