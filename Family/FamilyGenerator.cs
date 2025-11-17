@@ -178,7 +178,8 @@ public class FamilyGenerator : MonoBehaviour
                 int wifeAge = CalculateSpouseAge(sonAge, fertilityConfig.minBreedingAge);
                 
                 var wifeData = new MemberAgeData(gen2Wife, wifeAge, Gender.Female, 2, false);
-                AssignExternalIdentity(wifeData, familyName, socialClass);
+                var preferredClass = GetMarriageTargetSocialClass(socialClass, Gender.Female);
+                AssignExternalIdentity(wifeData, familyName, socialClass, preferredClass);
                 structure.AddMember(wifeData);
                 structure.AddMarriage(gen2Son, gen2Wife, 2);
             }
@@ -281,7 +282,8 @@ public class FamilyGenerator : MonoBehaviour
                 int wifeAge = CalculateSpouseAge(childAge, fertilityConfig.minBreedingAge);
                 
                 var wifeData = new MemberAgeData(wifeId, wifeAge, Gender.Female, childGeneration, false);
-                AssignExternalIdentity(wifeData, structure.familyName, structure.socialClass);
+                var preferredClass = GetMarriageTargetSocialClass(structure.socialClass, Gender.Female);
+                AssignExternalIdentity(wifeData, structure.familyName, structure.socialClass, preferredClass);
                 structure.AddMember(wifeData);
                 structure.AddMarriage(childId, wifeId, childGeneration);
             }
@@ -928,6 +930,15 @@ public class FamilyGenerator : MonoBehaviour
         }
         
         return plan.GetMatchedClass(hostSocialClass, random);
+    }
+    
+    private string GetMarriageTargetSocialClass(string hostSocialClass, Gender spouseGender)
+    {
+        if (ActivePlan == null)
+        {
+            return hostSocialClass;
+        }
+        return ActivePlan.GetMarriageTargetClass(hostSocialClass, spouseGender, random);
     }
     
     private void TryAssignRuzhuiSpouse(FamilyStructure structure, FamilyIdManager idManager, string daughterId, int generation)
