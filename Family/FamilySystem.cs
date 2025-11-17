@@ -90,9 +90,20 @@ public class FamilySystem : MonoBehaviour
     }
     
     /// <summary>
-    /// 获取家族成员列表
+    /// 获取家族成员列表（默认：仅在世，排除外姓配偶）
     /// </summary>
     public IReadOnlyCollection<CharacterRuntimeData> GetFamilyMembers(string familyName)
+    {
+        return GetFamilyMembers(familyName, includeDeceased: false, includeExternalSpouses: false);
+    }
+    
+    /// <summary>
+    /// 获取家族成员列表，可选包含已故、外姓配偶
+    /// </summary>
+    public IReadOnlyCollection<CharacterRuntimeData> GetFamilyMembers(
+        string familyName,
+        bool includeDeceased,
+        bool includeExternalSpouses)
     {
         if (string.IsNullOrEmpty(familyName))
         {
@@ -101,7 +112,7 @@ public class FamilySystem : MonoBehaviour
         
         if (familyCaches.TryGetValue(familyName, out var cache))
         {
-            return cache.GetMembers();
+            return cache.GetMembers(includeDeceased, includeExternalSpouses);
         }
         
         return Array.Empty<CharacterRuntimeData>();
@@ -129,6 +140,51 @@ public class FamilySystem : MonoBehaviour
     public List<CharacterRuntimeData> GetAllCharacters()
     {
         return new List<CharacterRuntimeData>(characters.Values);
+    }
+    
+    /// <summary>
+    /// 获取祖先链（向上：父母-祖父母...）
+    /// </summary>
+    public List<CharacterRuntimeData> GetAncestors(string characterId, int maxDepth = 5)
+    {
+        List<CharacterRuntimeData> result = new List<CharacterRuntimeData>();
+        void AddParent(string pid, int depth)
+        {
+            if (depth > maxDepth || string.IsNullOrEmpty(pid)) return;
+            var p = GetCharacter(pid);
+            if (p == null) return;
+            result.Add(p);
+            AddParent(p.fatherId, depth + 1);
+            AddParent(p.motherId, depth + 1);
+        }
+        AddParent(characterId, 1);
+        return result;
+    }
+    
+    /// <summary>
+    /// 获取子孙链（向下：子-孙...）
+    /// </summary>
+    public List<CharacterRuntimeData> GetDescendants(string characterId, int maxDepth = 5, bool includeDeceased = true)
+    {
+        List<CharacterRuntimeData> result = new List<CharacterRuntimeData>();
+        void AddChildren(string cid, int depth)
+        {
+            if (depth > maxDepth || string.IsNullOrEmpty(cid)) return;
+            var c = GetCharacter(cid);
+            if (c == null || c.childrenIds == null) return;
+            foreach (var childId in c.childrenIds)
+            {
+                var child = GetCharacter(childId);
+                if (child == null) continue;
+                if (includeDeceased || child.vitalStatus == "living")
+                {
+                    result.Add(child);
+                }
+                AddChildren(childId, depth + 1);
+            }
+        }
+        AddChildren(characterId, 1);
+        return result;
     }
     
     private void RebuildFamilyCaches()
@@ -182,14 +238,14 @@ public class FamilySystem : MonoBehaviour
         characters.TryGetValue(characterId, out var data);
         return data;
     }
-    
+
     public FamilyIdentity BuildFamilyIdentity(string characterId)
     {
-        if (string.IsNullOrEmpty(characterId) || !characters.TryGetValue(characterId, out var data))
+        if (string.IsNullOrEmpty(characterId))
         {
             return FamilyIdentity.Empty;
         }
-        return FamilyIdentity.Create(data);
+        return BuildFamilyIdentity(GetCharacter(characterId));
     }
     
     public FamilyIdentity BuildFamilyIdentity(CharacterRuntimeData member)
@@ -260,6 +316,15 @@ internal class FamilyCache
         return members.Values.ToList();
     }
     
+    public IReadOnlyCollection<CharacterRuntimeData> GetMembers(bool includeDeceased, bool includeExternal)
+    {
+        return members.Values
+            .Where(m => m != null)
+            .Where(m => includeDeceased || m.vitalStatus == "living")
+            .Where(m => includeExternal || !m.isExternalSpouse)
+            .ToList();
+    }
+    
     public IReadOnlyDictionary<int, int> GetGenerationSpread()
     {
         return new Dictionary<int, int>(generationSpread);
@@ -315,8 +380,8 @@ public struct FamilyIdentity
         
         bool living = member.vitalStatus == "living";
         string status = living
-            ? $"在世 {Mathf.Max(1, member.age)}岁"
-            : $"已故 享年{Mathf.Max(1, member.age)}岁";
+            ? $" {Mathf.Max(1, member.age)}岁"
+            : $"殁年{Mathf.Max(1, member.age)}岁";
         
         string origin = ResolveOrigin(member);
         string tag = string.Empty;
@@ -326,13 +391,13 @@ public struct FamilyIdentity
         }
         else if (member.isExternalSpouse)
         {
-            tag = "外姓配偶";
+            tag = "妻室";
         }
         
         return new FamilyIdentity
         {
             statusText = status,
-            originText = string.IsNullOrEmpty(origin) ? string.Empty : $"原籍{origin}",
+            originText = string.IsNullOrEmpty(origin) ? string.Empty : $"{origin}",
             tagText = tag,
             isLiving = living,
             isExternal = member.isExternalSpouse,

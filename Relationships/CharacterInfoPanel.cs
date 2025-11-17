@@ -45,14 +45,14 @@ public class CharacterInfoPanel : MonoBehaviour
         }
         
         familyText?.SetText($"家族: {character.familyName}氏");
-        nameText?.SetText($"姓名: {character.name}");
-        ageText?.SetText($"年龄: {character.age}岁");
-        genderText?.SetText($"性别: {(character.gender == Gender.Male ? "男" : "女")}");
-        generationText?.SetText($"辈分: 第{character.generation}代");
+        nameText?.SetText($"{character.name}");
+        ageText?.SetText($"{character.age}岁");
+        genderText?.SetText($"{(character.gender == Gender.Male ? "男" : "女")}");
+        generationText?.SetText(BuildGenerationLine(character));
         
         fatherText?.SetText(BuildParentInfo("父亲", character.fatherId));
         motherText?.SetText(BuildParentInfo("母亲", character.motherId));
-        siblingsText?.SetText(BuildRelativeList("兄弟姐妹", CollectSiblings(character)));
+        siblingsText?.SetText(BuildRelativeList("手足", CollectSiblings(character)));
         childrenText?.SetText(BuildRelativeList("子女", CollectChildren(character)));
         
         var profile = GameManager.Instance.virtueSystem.GetProfile(character.characterId);
@@ -61,13 +61,13 @@ public class CharacterInfoPanel : MonoBehaviour
             var topCategory = profile.GetTopCategory(GameManager.Instance.virtueSystem.configData);
             var topTraits = profile.GetTopTraitDescriptions(3);
             
-            string display = $"德性侧重: {topCategory.categoryName}\n";
+            string display = $"品格: {topCategory.categoryName}\n";
             display += string.Join("\n", topTraits);
             topVirtuesText.SetText(display);
         }
         else
         {
-            topVirtuesText.SetText("德行特征: 暂无");
+            topVirtuesText.SetText("品格特征: 暂无");
         }
     }
     
@@ -75,16 +75,17 @@ public class CharacterInfoPanel : MonoBehaviour
     {
         if (string.IsNullOrEmpty(parentId))
         {
-            return $"{label}: 未知";
+            return $"{label}: 不详";
         }
         
         var parent = familySystem?.GetCharacter(parentId);
         if (parent == null)
         {
-            return $"{label}: 未知";
+            return $"{label}: 不详";
         }
         
-        return $"{label}: {BuildIdentityLine(parent)}";
+        // 父母只显示姓名 + 存活状态 + 年龄
+        return $"{label}: {BuildBasicLine(parent)}";
     }
     
     private string BuildRelativeList(string label, List<string> relatives)
@@ -158,7 +159,7 @@ public class CharacterInfoPanel : MonoBehaviour
     {
         if (data == null)
         {
-            return "未知";
+            return "不详";
         }
         
         FamilyIdentity identity = familySystem != null
@@ -177,10 +178,41 @@ public class CharacterInfoPanel : MonoBehaviour
         
         string tagSection = tags.Count > 0 ? $" ({string.Join(" | ", tags)})" : string.Empty;
         string status = string.IsNullOrEmpty(identity.statusText)
-            ? (data.vitalStatus == "living" ? $"在世 {data.age}岁" : $"已故 享年{data.age}岁")
+            ? (data.vitalStatus == "living" ? $"{data.age}岁" : $"殁年{data.age}岁")
             : identity.statusText;
         
-        return $"{data.name}{tagSection} - {status}";
+        return $"{data.name}{tagSection} {status}";
+    }
+
+    private string BuildBasicLine(CharacterRuntimeData data)
+    {
+        if (data == null)
+        {
+            return "不详";
+        }
+        bool living = data.vitalStatus == "living";       
+        string ageInfo = living ? $"{data.age}岁" : $"殁年{data.age}岁";
+        return $"{data.name} {ageInfo}";
+    }
+
+    private string BuildGenerationLine(CharacterRuntimeData data)
+    {
+        if (data == null)
+        {
+            return "族辈: 不详";
+        }
+
+        if (data.isExternalSpouse && data.gender == Gender.Female)
+        {
+            return $"妻室: 第{data.generation}代";
+        }
+
+        if (data.isRuzhui || (data.isExternalSpouse && data.gender == Gender.Male))
+        {
+            return $"赘婿: 第{data.generation}代";
+        }
+
+        return $"族辈: 第{data.generation}代";
     }
 }
 
