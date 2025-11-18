@@ -60,7 +60,7 @@ public class CameraController : MonoBehaviour
         {
             rotationX += Input.GetAxis("Mouse X") * rotationSensitivity;
             rotationY -= Input.GetAxis("Mouse Y") * rotationSensitivity;
-            rotationY = Mathf.Clamp(rotationY, 10f, 85f);
+            rotationY = Mathf.Clamp(rotationY, -89f, 89f);
             ApplyRotation();
         }
     }
