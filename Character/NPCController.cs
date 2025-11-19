@@ -1,19 +1,30 @@
 using UnityEngine;
 using UnityEngine.AI;
+using GameSystems;
 
 [RequireComponent(typeof(NavMeshAgent))]
 public class NPCController : MonoBehaviour
 {
     public CharacterRuntimeData characterData;
     
+    [Header("行为系统")]
+    public DailySchedule dailySchedule;
+    public NPCBehaviorState currentBehavior = NPCBehaviorState.Idle;
+    
     private NavMeshAgent agent;
     private TextMesh nameLabel;
-    private Animator animator; // 添加
+    private Animator animator;
     
     // 动画参数名
     private static readonly int SpeedHash = Animator.StringToHash("Speed");
     private static readonly int SpeedXHash = Animator.StringToHash("SpeedX");
     private static readonly int SpeedZHash = Animator.StringToHash("SpeedZ");
+    
+    // 行为状态动画参数（根据你的动画控制器调整）
+    private static readonly int IsSleepingHash = Animator.StringToHash("IsSleeping");
+    private static readonly int IsWorkingHash = Animator.StringToHash("IsWorking");
+    private static readonly int IsRestingHash = Animator.StringToHash("IsResting");
+    private static readonly int IsEatingHash = Animator.StringToHash("IsEating");
     
     public void Initialize(CharacterRuntimeData data)
     {
@@ -41,7 +52,28 @@ public class NPCController : MonoBehaviour
         // 设置位置
         transform.position = data.position;
         
+        // 创建默认日程表
+        if (dailySchedule == null)
+        {
+            dailySchedule = DailySchedule.CreateSimpleTestSchedule();
+        }
+        
+        // 注册到调度管理器
+        if (NPCScheduleManager.Instance != null)
+        {
+            NPCScheduleManager.Instance.RegisterNPC(this);
+        }
+        
         Debug.Log($"✅ NPC初始化: {data.name}");
+    }
+    
+    void OnDestroy()
+    {
+        // 注销
+        if (NPCScheduleManager.Instance != null)
+        {
+            NPCScheduleManager.Instance.UnregisterNPC(this);
+        }
     }
     
     void Update()
@@ -63,9 +95,189 @@ public class NPCController : MonoBehaviour
         }
     }
     
+    /// <summary>
+    /// 时辰变化回调 - 由NPCScheduleManager调用
+    /// </summary>
+    public void OnTimeOfDayChanged(TimeOfDay newTimeOfDay)
+    {
+        if (dailySchedule == null)
+        {
+            return;
+        }
+        
+        // 查询新时辰的行为
+        TimeSlotBehavior timeSlot = dailySchedule.GetBehaviorForTime(newTimeOfDay);
+        
+        // 切换行为
+        SwitchBehavior(timeSlot.behavior);
+        
+        Debug.Log($"👤 {characterData?.name ?? "NPC"}: {newTimeOfDay} → {timeSlot.behavior}");
+    }
+    
+    /// <summary>
+    /// 切换行为状态
+    /// </summary>
+    private void SwitchBehavior(NPCBehaviorState newBehavior)
+    {
+        if (currentBehavior == newBehavior)
+        {
+            return;
+        }
+        
+        // 退出旧行为
+        ExitBehavior(currentBehavior);
+        
+        // 进入新行为
+        currentBehavior = newBehavior;
+        EnterBehavior(currentBehavior);
+    }
+    
+    /// <summary>
+    /// 进入行为状态
+    /// </summary>
+    private void EnterBehavior(NPCBehaviorState behavior)
+    {
+        if (animator == null)
+        {
+            return;
+        }
+        
+        // 获取RandomWalk组件
+        var randomWalk = GetComponent<NPCRandomWalk>();
+        
+        // 根据行为决定RandomWalk和移动控制
+        if (behavior == NPCBehaviorState.Idle)
+        {
+            // Idle状态：启用RandomWalk，恢复移动能力
+            if (randomWalk != null)
+            {
+                randomWalk.enabled = true;
+            }
+            
+            if (agent != null && agent.isOnNavMesh)
+            {
+                agent.isStopped = false;  // 恢复移动能力
+            }
+        }
+        else
+        {
+            // 其他状态：禁用RandomWalk，停止移动
+            if (randomWalk != null)
+            {
+                randomWalk.enabled = false;
+            }
+            
+            // 停止NavMesh移动
+            if (agent != null && agent.isOnNavMesh)
+            {
+                agent.ResetPath();
+                agent.velocity = Vector3.zero;
+                agent.isStopped = true;
+            }
+        }
+        
+        // 重置所有行为动画参数
+        ResetAllBehaviorAnimations();
+        
+        // 设置对应的动画参数
+        switch (behavior)
+        {
+            case NPCBehaviorState.Sleeping:
+                if (animator.parameters.Length > 0)
+                {
+                    animator.SetBool(IsSleepingHash, true);
+                }
+                break;
+                
+            case NPCBehaviorState.Working:
+                if (animator.parameters.Length > 0)
+                {
+                    animator.SetBool(IsWorkingHash, true);
+                }
+                break;
+                
+            case NPCBehaviorState.Resting:
+                if (animator.parameters.Length > 0)
+                {
+                    animator.SetBool(IsRestingHash, true);
+                }
+                break;
+                
+            case NPCBehaviorState.Eating:
+                if (animator.parameters.Length > 0)
+                {
+                    animator.SetBool(IsEatingHash, true);
+                }
+                break;
+                
+            case NPCBehaviorState.Idle:
+            case NPCBehaviorState.Walking:
+            default:
+                // 保持Idle动画
+                break;
+        }
+    }
+    
+    /// <summary>
+    /// 退出行为状态
+    /// </summary>
+    private void ExitBehavior(NPCBehaviorState behavior)
+    {
+        // 如果要退出非Idle状态，恢复NavMeshAgent
+        if (behavior != NPCBehaviorState.Idle && behavior != NPCBehaviorState.Walking)
+        {
+            if (agent != null && agent.isOnNavMesh)
+            {
+                agent.isStopped = false;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// 重置所有行为动画参数
+    /// </summary>
+    private void ResetAllBehaviorAnimations()
+    {
+        if (animator == null || animator.parameters.Length == 0)
+        {
+            return;
+        }
+        
+        // 检查参数是否存在再设置
+        if (HasParameter(IsSleepingHash))
+            animator.SetBool(IsSleepingHash, false);
+        if (HasParameter(IsWorkingHash))
+            animator.SetBool(IsWorkingHash, false);
+        if (HasParameter(IsRestingHash))
+            animator.SetBool(IsRestingHash, false);
+        if (HasParameter(IsEatingHash))
+            animator.SetBool(IsEatingHash, false);
+    }
+    
+    /// <summary>
+    /// 检查动画参数是否存在
+    /// </summary>
+    private bool HasParameter(int paramHash)
+    {
+        if (animator == null)
+        {
+            return false;
+        }
+        
+        foreach (var param in animator.parameters)
+        {
+            if (param.nameHash == paramHash)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    
     private void UpdateAnimation()
     {
-        if (animator == null || agent == null) return;
+        if (animator == null || agent == null) 
+            return;
         
         // 获取NavMesh Agent的速度
         Vector3 velocity = agent.velocity;
@@ -74,21 +286,31 @@ public class NPCController : MonoBehaviour
         // 转换到局部空间（相对角色朝向）
         Vector3 localVelocity = transform.InverseTransformDirection(velocity);
         
-        // 更新动画参数
-        animator.SetFloat(SpeedHash, speed);
-        animator.SetFloat(SpeedXHash, localVelocity.x);
-        animator.SetFloat(SpeedZHash, localVelocity.z);
+        // 更新移动动画参数
+        if (HasParameter(SpeedHash))
+            animator.SetFloat(SpeedHash, speed);
+        if (HasParameter(SpeedXHash))
+            animator.SetFloat(SpeedXHash, localVelocity.x);
+        if (HasParameter(SpeedZHash))
+            animator.SetFloat(SpeedZHash, localVelocity.z);
     }
     
     private void UpdatePhysicalState()
     {
-        characterData.physical.hunger -= Time.deltaTime * 0.05f;
+        // 获取当前行为的配置
+        BehaviorStateConfig config = BehaviorStateDatabase.GetConfig(currentBehavior);
         
+        // 应用状态变化
+        characterData.physical.hunger += config.hungerCost * Time.deltaTime;
+        characterData.physical.energy -= config.energyCost * Time.deltaTime;
+        
+        // 移动额外消耗
         if (agent.velocity.magnitude > 0.1f)
         {
-            characterData.physical.energy -= Time.deltaTime * 0.1f;
+            characterData.physical.energy -= Time.deltaTime * 0.05f;
         }
         
+        // 限制范围
         characterData.physical.hunger = Mathf.Clamp(characterData.physical.hunger, 0, 100);
         characterData.physical.energy = Mathf.Clamp(characterData.physical.energy, 0, 100);
     }
@@ -101,18 +323,7 @@ public class NPCController : MonoBehaviour
         }
     }
     
-    // 在NPCController类的最后添加
-    public void FootL()
-    {
-        // 脚步声事件 - 左脚
-        // 将来可以在这里播放脚步音效
-    }
-
-    public void FootR()
-    {
-        // 脚步声事件 - 右脚
-    }
-
-
-
+    // 脚步声事件
+    public void FootL() { }
+    public void FootR() { }
 }

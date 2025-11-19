@@ -18,7 +18,7 @@ public class CameraController : MonoBehaviour
     public float dragSpeed = 0.5f;
     
     [Header("缩放")]
-    public float scrollSpeed = 50f;
+    public float scrollSpeed = 2f;  // 降低默认值，更平滑
     [Tooltip("距地面的最近高度")]
     public float minZoomHeight = 2.5f;
     [Tooltip("距地面的最远高度")]
@@ -109,15 +109,18 @@ public class CameraController : MonoBehaviour
     
     private void HandleZoom()
     {
-        float delta = Input.GetAxis("Mouse ScrollWheel") * scrollSpeed;
+        // 修复：使用Input.mouseScrollDelta获取滚轮输入
+        float scrollInput = Input.mouseScrollDelta.y;
+        float delta = scrollInput * scrollSpeed;
         
+        // 键盘缩放
         if (Input.GetKey(zoomInKey))
         {
-            delta += keyboardZoomSpeed;
+            delta += keyboardZoomSpeed * Time.deltaTime;
         }
         if (Input.GetKey(zoomOutKey))
         {
-            delta -= keyboardZoomSpeed;
+            delta -= keyboardZoomSpeed * Time.deltaTime;
         }
         
         if (Mathf.Abs(delta) <= 0.001f)
@@ -125,7 +128,7 @@ public class CameraController : MonoBehaviour
             return;
         }
         
-        Vector3 target = transform.position + transform.forward * delta * Time.deltaTime;
+        Vector3 target = transform.position + transform.forward * delta;
         AdjustHeight(ref target);
         transform.position = target;
     }
