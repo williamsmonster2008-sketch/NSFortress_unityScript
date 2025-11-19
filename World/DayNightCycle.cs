@@ -4,8 +4,9 @@ namespace GameSystems
 {
     public class DayNightCycle : MonoBehaviour
     {
-        [Header("星空")]
-        public Material starDomeMaterial;  // 拖入StarDomeMaterial
+        [Header("星空")]        
+        public Material nightSkybox;
+        public Material daySkybox;  // 添加白天天空盒引用  
 
         [Header("引用")]
         public Light sunLight;              // 太阳光源
@@ -16,29 +17,30 @@ namespace GameSystems
         [Header("光照配置")]
         [Range(0, 8)]
         public float maxSunIntensity = 1.5f;  // 增强白天亮度
-        [Range(0, 1)]
-        public float maxMoonIntensity = 0.1f;
+        [Range(0, 2)]
+        public float maxMoonIntensity = 1.0f;
         
         public Color dawnColor = new Color(1f, 0.7f, 0.5f);      // 黎明橙红
         public Color noonColor = new Color(1f, 0.95f, 0.9f);     // 正午明亮
         public Color duskColor = new Color(1f, 0.5f, 0.3f);      // 黄昏橙
         public Color nightColor = new Color(0.3f, 0.4f, 0.6f);   // 夜晚蓝
         
-        [Header("天空盒过渡")]
-        [Range(0, 1)]
-        public float skyboxBlendSpeed = 0.1f;  // 平滑过渡速度
+        
         
         private TimeSystem timeSystem;
         private Material currentSkybox;
-        private float skyboxBlend = 0f;  // 0=夜晚, 1=白天
+        // private float skyboxBlend = 0f;  // 0=夜晚, 1=白天
         
         void Start()
         {
             timeSystem = GetComponent<TimeSystem>();
             
-            // 初始化光源
             if (sunLight) sunLight.shadows = LightShadows.Soft;
             if (moonLight) moonLight.shadows = LightShadows.None;
+            
+            // 获取当前天空盒作为白天天空盒
+            daySkybox = RenderSettings.skybox;
+            currentSkybox = daySkybox;
         }
         
         void Update()
@@ -68,48 +70,95 @@ namespace GameSystems
             float moonAngle = sunAngle + 180f;
             float moonX = Mathf.Cos(moonAngle * Mathf.Deg2Rad) * radius;
             float moonY = Mathf.Sin(moonAngle * Mathf.Deg2Rad) * radius + 200f;
-            moonTransform.position = new Vector3(moonX, moonY, 0);
-            moonTransform.LookAt(Vector3.zero + Vector3.up * 200f);
+            Vector3 moonPos = new Vector3(moonX, moonY, 0);
+            
+            // 计算月亮到地面中心的方向
+            Vector3 targetPos = Vector3.zero + Vector3.up * 200f;
+            if (moonTransform)
+            {
+                moonTransform.position = moonPos;
+                moonTransform.LookAt(targetPos);
+            }
+            
             
             // 同步Directional Light方向
             if (sunLight) sunLight.transform.rotation = sunTransform.rotation;
-            if (moonLight) moonLight.transform.rotation = moonTransform.rotation;
+            if (moonLight)
+            {
+                moonLight.transform.position = moonPos;
+                // 月光方向：从地面中心指向月亮（反向）
+                Vector3 lightDirection = (targetPos - moonPos).normalized;
+                moonLight.transform.rotation = Quaternion.LookRotation(lightDirection);
+            }
         }
         
         void UpdateLighting()
         {
             float dayProgress = GetDayProgress();
             
-            // 计算太阳高度（-1到1）
+            // 计算太阳高度
             float sunHeight = Mathf.Sin((dayProgress * 360f - 90f) * Mathf.Deg2Rad);
             
-            // 太阳光强度（平滑曲线）
-            float sunIntensity = Mathf.Clamp01((sunHeight + 0.2f) / 1.2f);  // 地平线以下也有微光
-            sunIntensity = Mathf.Pow(sunIntensity, 0.5f) * maxSunIntensity;  // 平方根曲线，更自然
-            
+            // 根据时间决定谁是主光源（有阴影）
+            bool isNight = (dayProgress < 0.25f || dayProgress > 0.75f);
+
+            // 太阳光强度
+            float sunIntensity = Mathf.Clamp01((sunHeight + 0.2f) / 1.2f);
+            sunIntensity = Mathf.Pow(sunIntensity, 0.5f) * maxSunIntensity;
+
             if (sunLight)
             {
                 sunLight.intensity = sunIntensity;
                 sunLight.color = GetSunColor(dayProgress);
+                sunLight.shadows = isNight ? LightShadows.None : LightShadows.Soft;
             }
-            
-            // 月光强度（太阳下山后）
-            float moonIntensity = Mathf.Clamp01((-sunHeight + 0.1f) / 1.1f) * maxMoonIntensity;
+                        
+            // 重新计算月光强度（夜晚时达到最大值）
+            float moonIntensity;
+            if (isNight)
+            {
+                // 深夜时达到最大值
+                if (dayProgress < 0.5f)  // 前半夜
+                {
+                    // 0.25 -> 0: 从0渐变到最大
+                    moonIntensity = Mathf.Lerp(0f, maxMoonIntensity, (0.25f - dayProgress) / 0.25f);
+                }
+                else  // 后半夜
+                {
+                    // 0.75 -> 1.0: 从0渐变到最大
+                    moonIntensity = Mathf.Lerp(0f, maxMoonIntensity, (dayProgress - 0.75f) / 0.25f);
+                }
+            }
+            else
+            {
+                moonIntensity = 0f;
+            }            
+                        
             if (moonLight)
             {
                 moonLight.intensity = moonIntensity;
-                moonLight.color = new Color(0.7f, 0.8f, 1f);  // 淡蓝色月光
+                moonLight.color = new Color(0.7f, 0.8f, 1f);
+                moonLight.shadows = isNight ? LightShadows.Soft : LightShadows.None;  // 新增
             }
             
-            // 环境光（重要！）
-            RenderSettings.ambientIntensity = Mathf.Lerp(0.3f, 1.0f, sunIntensity / maxSunIntensity);
-            RenderSettings.ambientLight = Color.Lerp(nightColor, noonColor, sunIntensity / maxSunIntensity);
+            // 环境光
+            float minAmbient = 0.65f;
+            RenderSettings.ambientIntensity = Mathf.Lerp(minAmbient, 1.0f, sunIntensity / maxSunIntensity);
+            // 夜晚环境光偏蓝一点
+            Color nightAmbient = new Color(0.45f, 0.5f, 0.65f);  // 淡蓝色
+            RenderSettings.ambientLight = Color.Lerp(nightAmbient, noonColor, sunIntensity / maxSunIntensity);
+    
 
-            // 控制星空可见度
-            if (starDomeMaterial != null)
+            // 天空盒切换
+            Material targetSkybox = isNight ? nightSkybox : daySkybox;
+            Light targetSunSource = isNight ? moonLight : sunLight;
+            
+            if (targetSkybox != currentSkybox && targetSkybox != null)
             {
-                float starAlpha = Mathf.Clamp01((-sunHeight + 0.3f) / 1.3f);  // 太阳下山后显示
-                starDomeMaterial.SetFloat("_Alpha", starAlpha);
+                RenderSettings.skybox = targetSkybox;
+                currentSkybox = targetSkybox;
+                RenderSettings.sun = targetSunSource;
+                DynamicGI.UpdateEnvironment();
             }
         }
 

@@ -6,7 +6,7 @@ using UnityEngine;
 public class CameraController : MonoBehaviour
 {
     [Header("初始定位")]
-    public Vector3 initialPosition = new Vector3(332f, 210f, 225f);
+    public Vector3 initialPosition = new Vector3(332f, 300f, 225f);
     public Vector2 initialRotation = new Vector2(45f, 0f);
     
     [Header("移动")]
