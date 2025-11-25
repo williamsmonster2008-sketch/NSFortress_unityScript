@@ -11,20 +11,26 @@ namespace GameSystems
         public int solarTermsPerMonth = 2;
         public int monthsPerSeason = 3;
         public int seasonsPerYear = 4;
-        public int timeStepsPerDay = 6;         // 6个时辰
+        public int timeStepsPerDay = 12;        // 12个时辰
     }
     
     /// <summary>
-    /// 时辰枚举
+    /// 时辰枚举（12时辰）
     /// </summary>
     public enum TimeOfDay
     {
-        黎明 = 0,  // 5-7时 (0.0-0.166)
-        上午 = 1,  // 7-11时 (0.166-0.333)
-        正午 = 2,  // 11-13时 (0.333-0.5)
-        下午 = 3,  // 13-17时 (0.5-0.666)
-        黄昏 = 4,  // 17-19时 (0.666-0.833)
-        夜晚 = 5   // 19-5时 (0.833-1.0)
+        子时 = 0,   // 23-1时 (夜半)
+        丑时 = 1,   // 1-3时 (鸡鸣)
+        寅时 = 2,   // 3-5时 (平旦)
+        卯时 = 3,   // 5-7时 (日出)
+        辰时 = 4,   // 7-9时 (食时)
+        巳时 = 5,   // 9-11时 (隅中)
+        午时 = 6,   // 11-13时 (日中)
+        未时 = 7,   // 13-15时 (日昳)
+        申时 = 8,   // 15-17时 (哺时)
+        酉时 = 9,   // 17-19时 (日入)
+        戌时 = 10,  // 19-21时 (黄昏)
+        亥时 = 11   // 21-23时 (人定)
     }
 
     public class TimeSystem : MonoBehaviour
@@ -42,7 +48,7 @@ namespace GameSystems
         public event Action<int> OnNewDay;
         public event Action<string> OnNewSeason;
         
-        private TimeOfDay currentTimeOfDay = TimeOfDay.黎明;
+        private TimeOfDay currentTimeOfDay = TimeOfDay.子时;
         private int currentDay = 0;
         
         void Update()
@@ -83,8 +89,19 @@ namespace GameSystems
         public TimeOfDay GetCurrentTimeOfDay()
         {
             float dayProgress = GetDayProgress();
-            int index = Mathf.FloorToInt(dayProgress * config.timeStepsPerDay);
-            index = Mathf.Clamp(index, 0, config.timeStepsPerDay - 1);
+            
+            // 子时特殊处理：23-24时和0-1时
+            // dayProgress: 0.958-1.0 和 0.0-0.042 都是子时
+            if (dayProgress >= 0.958f || dayProgress < 0.042f)
+            {
+                return TimeOfDay.子时;
+            }
+            
+            // 其他时辰：从丑时(1)开始
+            // 丑时开始于 dayProgress = 0.042
+            int index = Mathf.FloorToInt((dayProgress - 0.042f) / (1f / 12f)) + 1;
+            index = Mathf.Clamp(index, 1, 11);
+            
             return (TimeOfDay)index;
         }
         
@@ -104,12 +121,18 @@ namespace GameSystems
         {
             switch (currentTimeOfDay)
             {
-                case TimeOfDay.黎明: return "鸡鸣时分，万物苏醒";
-                case TimeOfDay.上午: return "朝阳初升，劳作时光";
-                case TimeOfDay.正午: return "日当中天，午休小憩";
-                case TimeOfDay.下午: return "午后斜阳，继续劳作";
-                case TimeOfDay.黄昏: return "夕阳西下，归家用餐";
-                case TimeOfDay.夜晚: return "月明星稀，安眠时分";
+                case TimeOfDay.子时: return "夜半，又名子夜、中夜";
+                case TimeOfDay.丑时: return "鸡鸣，又名荒鸡";
+                case TimeOfDay.寅时: return "平旦，又名黎明、早晨";
+                case TimeOfDay.卯时: return "日出，又名日始、破晓";
+                case TimeOfDay.辰时: return "食时，又名早食";
+                case TimeOfDay.巳时: return "隅中，又名日禺";
+                case TimeOfDay.午时: return "日中，又名日正、中午";
+                case TimeOfDay.未时: return "日昳，又名日跌、日央";
+                case TimeOfDay.申时: return "哺时，又名日铺、夕食";
+                case TimeOfDay.酉时: return "日入，又名日落、黄昏";
+                case TimeOfDay.戌时: return "黄昏，又名日夕、日暮";
+                case TimeOfDay.亥时: return "人定，又名定昏";
                 default: return "";
             }
         }
