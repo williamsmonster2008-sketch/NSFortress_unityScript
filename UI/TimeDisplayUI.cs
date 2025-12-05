@@ -83,26 +83,7 @@ public class TimeDisplayUI : MonoBehaviour
         // 更新时辰描述
         if (showDescription && descriptionText != null)
         {
-            // 获取用于显示描述的时辰
-            // 如果当前是零刻，显示上一个时辰的描述
-            // 如果当前是1-7刻（显示为一刻到八刻），显示当前时辰的描述
-            TimeOfDay displayTime;
-            
-            if (ke >= 1)  // ke=1-7 显示为二刻到八刻
-            {
-                // 显示当前时辰描述
-                displayTime = timeSystem.GetCurrentTimeOfDay();
-            }
-            else  // ke=0 显示为一刻
-            {
-                // 零刻时显示上一个时辰的描述，一刻时切换到当前时辰
-                // 所以我们需要在ke=0时显示上一个时辰
-                int currentIndex = (int)timeSystem.GetCurrentTimeOfDay();
-                int previousIndex = (currentIndex - 1 + 12) % 12;
-                displayTime = (TimeOfDay)previousIndex;
-            }
-            
-            descriptionText.text = GetTimeOfDayDescription(displayTime);
+            descriptionText.text = GetTimeOfDayDescription(timeSystem.GetCurrentTimeOfDay());
         }
     }
     
@@ -147,7 +128,8 @@ public class TimeDisplayUI : MonoBehaviour
         // 一天24小时 = 12时辰
         // 每个时辰 = 2小时 = 8刻
         
-        float hour = dayProgress * 24f;
+         // 直接使用TimeSystem的计算结果
+        TimeOfDay currentTime = timeSystem.GetCurrentTimeOfDay();
         
         // 时辰对照表
         // 子时: 23-1时
@@ -155,39 +137,14 @@ public class TimeDisplayUI : MonoBehaviour
         // 寅时: 3-5时
         // ...
         
-        // 调整hour，让子时(23-1时)对应0-2小时范围
+        // 计算刻数
+        float hour = dayProgress * 24f;
         float adjustedHour = (hour + 1f) % 24f;
-        
-        // 计算时辰索引 (0-11)
-        int shiChenIndex = Mathf.FloorToInt(adjustedHour / 2f);
-        shiChenIndex = Mathf.Clamp(shiChenIndex, 0, 11);
-        
-        // 计算在当前时辰内的小时数 (0-2)
         float hourInShiChen = adjustedHour % 2f;
-        
-        // 计算刻数 (0-7)
-        // 2小时 = 8刻，所以每0.25小时 = 1刻
         ke = Mathf.FloorToInt(hourInShiChen / 0.25f);
         ke = Mathf.Clamp(ke, 0, 7);
         
-        // 十二时辰名称
-        string[] shiChenNames = 
-        {
-            "子时", // 23-1时
-            "丑时", // 1-3时
-            "寅时", // 3-5时
-            "卯时", // 5-7时
-            "辰时", // 7-9时
-            "巳时", // 9-11时
-            "午时", // 11-13时
-            "未时", // 13-15时
-            "申时", // 15-17时
-            "酉时", // 17-19时
-            "戌时", // 19-21时
-            "亥时"  // 21-23时
-        };
-        
-        return shiChenNames[shiChenIndex];
+        return currentTime.ToString();      
     }
     
     /// <summary>

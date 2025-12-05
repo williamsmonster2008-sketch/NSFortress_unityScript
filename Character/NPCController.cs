@@ -10,10 +10,11 @@ public class NPCController : MonoBehaviour
     [Header("行为系统")]
     public DailySchedule dailySchedule;
     public NPCBehaviorState currentBehavior = NPCBehaviorState.Idle;
-    
+    public NPCBehaviorState suggestedBehavior = NPCBehaviorState.Idle;
+    public Animator animator;
+
     private NavMeshAgent agent;
-    private TextMesh nameLabel;
-    private Animator animator;
+    private TextMesh nameLabel;    
     
     // 动画参数名
     private static readonly int SpeedHash = Animator.StringToHash("Speed");
@@ -24,8 +25,9 @@ public class NPCController : MonoBehaviour
     private static readonly int IsSleepingHash = Animator.StringToHash("IsSleeping");
     private static readonly int IsWorkingHash = Animator.StringToHash("IsWorking");
     private static readonly int IsRestingHash = Animator.StringToHash("IsResting");
-    private static readonly int IsEatingHash = Animator.StringToHash("IsEating");
-    
+    private static readonly int IsEatingHash = Animator.StringToHash("IsEating");    
+    private static readonly int RestVariantHash = Animator.StringToHash("RestVariant");
+
     public void Initialize(CharacterRuntimeData data)
     {
         characterData = data;
@@ -84,6 +86,7 @@ public class NPCController : MonoBehaviour
             nameLabel.transform.LookAt(Camera.main.transform);
             nameLabel.transform.Rotate(0, 180, 0);
         }
+
         
         // 更新动画
         UpdateAnimation();
@@ -109,9 +112,9 @@ public class NPCController : MonoBehaviour
         TimeSlotBehavior timeSlot = dailySchedule.GetBehaviorForTime(newTimeOfDay);
         
         // 切换行为
-        SwitchBehavior(timeSlot.behavior);
+        suggestedBehavior = timeSlot.behavior;
         
-        Debug.Log($"👤 {characterData?.name ?? "NPC"}: {newTimeOfDay} → {timeSlot.behavior}");
+        //Debug.Log($"👤 {characterData?.name ?? "NPC"}: {newTimeOfDay} → {timeSlot.behavior}");
     }
     
     /// <summary>
@@ -200,6 +203,13 @@ public class NPCController : MonoBehaviour
                 if (animator.parameters.Length > 0)
                 {
                     animator.SetBool(IsRestingHash, true);
+        
+                    // 随机选择Rest变体（0-2）
+                    if (HasParameter(RestVariantHash))
+                    {
+                        int variant = Random.Range(0, 3);
+                        animator.SetInteger(RestVariantHash, variant);
+                    }
                 }
                 break;
                 
